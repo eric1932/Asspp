@@ -90,11 +90,13 @@ def main():
     root.mkdir(parents=True, exist_ok=False)
     fetch_source("1rhino2/unicorn-tci", UNICORN_REVISION, root / "unicorn")
     # The TCI snapshot omits qemu/target (its Rust .gitignore matches target/).
-    # Restore only the x86 guest from the exact 2.1.4 base, keeping all TCI changes.
+    # Restore that directory from the exact 2.1.4 base, keeping all TCI changes.
+    # uc.c includes other architectures' headers even in an x86-only build.
     fetch_source("unicorn-engine/unicorn", UNICORN_BASE_REVISION, root / "unicorn-base")
     shutil.copytree(
-        root / "unicorn-base/qemu/target/i386",
-        root / "unicorn/unicorn-engine-sys-tci/qemu/target/i386",
+        root / "unicorn-base/qemu/target",
+        root / "unicorn/unicorn-engine-sys-tci/qemu/target",
+        dirs_exist_ok=True,
     )
     fetch_source("majd/ipatool", IPATOOL_REVISION, root / "ipatool")
     patch_loader(root / "ipatool")
