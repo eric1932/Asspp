@@ -5,6 +5,7 @@ on:
     branches: [codex/sap-auth-403, codex/sap-auth-403-live]
     paths:
       - Resources/SAPProbe/**
+      - Resources/SAPRuntime/**
       - .github/workflows/sap-probe.yml
   workflow_dispatch:
     inputs:
@@ -55,6 +56,10 @@ jobs:
           export ASSPP_SAP_UNICORN_LIBRARY="$(cat "$SAP_PROBE_DIRECTORY/library-path.txt")"
           export ASSPP_SAP_LIVE_PROBE=1
           go test -v -count=1 -timeout=15m ./internal/sap -run '^TestAssppSignedAuthentication$'
+      - name: Validate static C ABI runtime for Swift
+        env:
+          ASSPP_SAP_LIVE_PROBE: ${{ (inputs.live_signing || github.ref == 'refs/heads/codex/sap-auth-403-live') && '1' || '0' }}
+        run: bash Resources/SAPRuntime/build_static.sh "$SAP_PROBE_DIRECTORY"
       - name: Record validation scope
         if: always()
         env:
