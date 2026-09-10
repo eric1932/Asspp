@@ -71,7 +71,7 @@ public enum Authenticator {
             let response = try await environment.transport.send(AuthenticationRequest(url: url, method: "POST", headers: headers, body: body))
             try Task.checkCancellation()
             for cookie in response.cookies {
-                cookies.removeAll { $0.name == cookie.name && $0.domain == cookie.domain && $0.path == cookie.path }
+                cookies.removeAll { $0.name == cookie.name && cookieDomain($0) == cookieDomain(cookie) && $0.path == cookie.path }
                 cookies.append(cookie)
             }
             if let value = response.header("x-set-apple-store-front")?.components(separatedBy: "-").first, !value.isEmpty { storeFront = value }
@@ -85,20 +85,24 @@ public enum Authenticator {
             }
             // In particular, an empty 403 is terminal; retrying the same credentials cannot fix SAP.
             guard response.status == 200 else { throw AuthenticationError.requestRejected(status: response.status) }
-            return try account(from: response.body, email: email, password: password, code: code, cookies: cookies, storeFront: storeFront, pod: pod)
+            return try account(from: response.body, email: email, password: password, cookies: cookies, storeFront: storeFront, pod: pod)
         }
         throw AuthenticationError.tooManyRedirects
     }
 
-    private static func account(from data: Data, email: String, password: String, code: String, cookies: [Cookie], storeFront: String, pod: String?) throws -> Account {
+    private static func cookieDomain(_ cookie: Cookie) -> String? {
+        cookie.domain?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+
+    private static func account(from data: Data, email: String, password: String, cookies: [Cookie], storeFront: String, pod: String?) throws -> Account {
         let dictionary = try AuthenticationValidation.plist(data)
-        // Apple's legacy protocol signals the code challenge with an explicitly empty
-        // failureType. Missing/nonempty failureType must never turn bad credentials into 2FA.
-        if let failure = dictionary["failureType"] as? String, failure.isEmpty, code.isEmpty,
-           dictionary["customerMessage"] as? String == "MZFinance.BadLogin.Configurator_message" {
-            throw AuthenticationError.verificationCodeRequired
-        }
         if dictionary["failureType"] as? String == "5005" { throw AuthenticationError.invalidVerificationCode }
+        // Verified with fictional credentials: even an empty failureType plus this
+        // message is NOT proof of a 2FA challenge. Let the user opt into entering a
+        // code they actually received instead of claiming that Apple requires one.
+        if dictionary["customerMessage"] as? String == "MZFinance.BadLogin.Configurator_message" {
+            throw AuthenticationError.credentialsRejected
+        }
         if let failure = dictionary["failureType"] as? String, !failure.isEmpty {
             throw AuthenticationError.serverMessage(dictionary["customerMessage"] as? String ?? Strings.authFailed)
         }

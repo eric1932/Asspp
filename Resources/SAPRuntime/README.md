@@ -75,6 +75,13 @@ independently when SwiftPM dependencies are available.
   https://github.com/eric1932/Asspp/actions/runs/34442171675; that run then failed
   Swift compilation on the HTTP task cancellation API, which was corrected.
 
+The first full Swift live run reached credential validation in about 10 seconds.
+It also disproved the old 2FA heuristic: Apple's fictional-account response has
+an empty `failureType` plus `MZFinance.BadLogin.Configurator_message`. That is now
+reported as `credentialsRejected`. The UI offers an explicit “Enter Verification
+Code” action, while network/signing failures never reveal that field. Incorrect
+verification code responses (`5005`) retain the code field for correction.
+
 These results do not establish real-account login, 2FA, token refresh, downloads,
 or the memory/latency behavior on an iPhone. Perform those checks manually on a
 normal signed iPhone build and macOS build before calling the fix device-verified.

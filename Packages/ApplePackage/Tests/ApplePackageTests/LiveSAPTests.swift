@@ -11,7 +11,7 @@ final class LiveSAPTests: XCTestCase {
             _ = try await Authenticator.authenticate(email: "asspp-sap-probe@example.invalid", password: "not-a-real-apple-password")
             XCTFail("Fictional credentials must never authenticate")
         } catch let error as AuthenticationError {
-            XCTAssertEqual(error, .serverMessage("MZFinance.BadLogin.Configurator_message"), "Signed Swift request must reach credential validation")
+            XCTAssertEqual(error, .credentialsRejected, "Signed Swift request must reach credential validation")
         }
     }
 }

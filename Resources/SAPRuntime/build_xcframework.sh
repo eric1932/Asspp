@@ -65,6 +65,7 @@ xcodebuild -create-xcframework \
     -library "$runtime_directory/slices/iphoneos-arm64/libApplePackageSAP.a" -headers "$runtime_directory/slices/include" \
     -library "$runtime_directory/slices/simulator/libApplePackageSAP.a" -headers "$runtime_directory/slices/include" \
     -output "$artifact_directory/ApplePackageSAP.xcframework" | xcbeautify
+cp "$(go env GOROOT)/LICENSE" "$artifact_directory/NOTICES/Go-LICENSE"
 cp "$runtime_directory/ipatool/LICENSE" "$artifact_directory/NOTICES/ipatool-LICENSE"
 cp "$unicorn_sources/COPYING" "$artifact_directory/NOTICES/unicorn-COPYING"
 cp "$runtime_scripts/README.md" "$artifact_directory/NOTICES/BUILD-SOURCES.md"

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AuthenticationError: Error, LocalizedError, Equatable, Sendable {
-    case verificationCodeRequired
+    case credentialsRejected
     case invalidVerificationCode
     case requestRejected(status: Int)
     case invalidResponse
@@ -16,9 +16,9 @@ public enum AuthenticationError: Error, LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .verificationCodeRequired: return Strings.authRequiresVerificationCode
+        case .credentialsRejected: return "Apple could not verify these credentials. Check your Apple ID and password, or enter a verification code if Apple sent you one."
         case .invalidVerificationCode: return Strings.invalid2FACode
-        case .requestRejected(status: 403): return "Apple rejected the signed request (HTTP 403). Please try again later."
+        case .requestRejected(status: 403): return "Apple rejected the request (HTTP 403). Please try again later."
         case let .requestRejected(status): return "Apple returned HTTP \(status)."
         case .invalidResponse: return "Apple returned an invalid or empty authentication response."
         case .invalidEndpoint: return "Apple returned an unsupported authentication endpoint."

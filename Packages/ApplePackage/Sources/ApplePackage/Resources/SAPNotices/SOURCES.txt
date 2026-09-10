@@ -1,0 +1,18 @@
+SAP signing runtime source references
+
+Unicorn TCI (GPL-2.0 and included per-file licenses):
+https://github.com/1rhino2/unicorn-tci/tree/6d0794492de065cdf7e05d7658b4c1b157a34062
+Base target headers restored from:
+https://github.com/unicorn-engine/unicorn/tree/8028ec436f2d9376525352dd38ed9ed6b9f6be10
+
+ipatool SAP loader, guest shims, and asset verifier (MIT):
+https://github.com/majd/ipatool/tree/d5d0b56faf64e3fdef885d49e7928b390aadb6c7
+
+Go runtime and standard library (BSD-style license):
+https://go.dev/src/
+
+The Asspp source distribution includes the C ABI bridge and exact build/patch
+scripts in Resources/SAPRuntime and Resources/SAPProbe. Native artifacts retain
+the licenses above; Asspp's MIT license does not replace component licenses.
+Apple's signing resources are downloaded and verified on the device and are not
+part of the distributed app or this source repository.

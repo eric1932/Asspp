@@ -169,8 +169,8 @@ final class OfflineAuthenticationTests: XCTestCase {
         XCTAssertEqual(count, 2); XCTAssertEqual(closes, 1); XCTAssertEqual(transportCloses, 1)
     }
 
-    func testOnlyTheProtocolChallengeRequiresCode() async throws {
-        for (failure, code, expected) in [("", "", AuthenticationError.verificationCodeRequired), ("5005", "123456", .invalidVerificationCode), ("-5000", "", .serverMessage("MZFinance.BadLogin.Configurator_message"))] {
+    func testBadCredentialsAreNotAssumedToBeTwoFactorChallenge() async throws {
+        for (failure, code, expected) in [("", "", AuthenticationError.credentialsRejected), ("5005", "123456", .invalidVerificationCode), ("-5000", "", .credentialsRejected)] {
             let response = try AuthenticationResponse(body: plist(["failureType": failure, "customerMessage": "MZFinance.BadLogin.Configurator_message"]))
             let transport = try ScriptedTransport([bagResponse(), response]); let signer = RecordingSigner()
             do {
@@ -199,6 +199,30 @@ final class OfflineAuthenticationTests: XCTestCase {
         } catch { XCTAssertEqual(error as? TestFailure, .signing) }
         let count = await transport.requests.count; let closes = await signer.closes
         XCTAssertEqual(count, 1); XCTAssertEqual(closes, 1)
+    }
+
+    func testSignerInitializationFailureClosesTransportWithoutSendingCredentials() async throws {
+        let transport = try ScriptedTransport([bagResponse()]); let signer = RecordingSigner()
+        var environment = environment(transport, signer)
+        environment.makeSigner = { _, _, _, _, _ in throw TestFailure.signing }
+        do {
+            _ = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", environment: environment)
+            XCTFail("Expected signer initialization failure")
+        } catch { XCTAssertEqual(error as? TestFailure, .signing) }
+        let count = await transport.requests.count; let closes = await transport.closes
+        XCTAssertEqual(count, 1); XCTAssertEqual(closes, 1)
+    }
+
+    func testRefreshCookiesAreSentAndUpdatedWithoutDuplicates() async throws {
+        let old = Cookie(name: "session", value: "old", path: "/", domain: ".iTunes.apple.com", httpOnly: true, secure: true)
+        var new = old; new.value = "new"; new.domain = "itunes.apple.com"
+        var response = try successResponse(); response.cookies = [new]
+        let transport = try ScriptedTransport([bagResponse(), response]); let signer = RecordingSigner()
+        let account = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", cookies: [old], environment: environment(transport, signer))
+        let requests = await transport.requests
+        XCTAssertEqual(requests[1].headers.first { $0.0 == "Cookie" }?.1, "session=old")
+        XCTAssertEqual(account.cookie, [new])
+        XCTAssertEqual(account.password, "secret")
     }
 
     func testCancellationDuringSigningClosesWithoutSendingCredentials() async throws {

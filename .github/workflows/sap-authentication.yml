@@ -1,6 +1,10 @@
 name: SAP authentication regression
 on:
   workflow_call:
+    inputs:
+      skip_app_build:
+        type: boolean
+        default: false
   push:
     branches: [codex/sap-auth-403]
     paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', 'Asspp/**', 'Asspp.xcodeproj/**', '.github/workflows/sap-authentication.yml']
@@ -15,7 +19,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: sap-authentication-${{ github.ref }}
+  group: sap-authentication-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   offline:
@@ -61,6 +65,7 @@ jobs:
           retention-days: 7
 
   app-build:
+    if: ${{ !inputs.skip_app_build }}
     needs: [offline, native]
     runs-on: macos-26
     timeout-minutes: 35

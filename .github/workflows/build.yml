@@ -9,6 +9,8 @@ on:
 jobs:
   sap-runtime:
     uses: ./.github/workflows/sap-authentication.yml
+    with:
+      skip_app_build: true
 
   build-ios:
     needs: sap-runtime
