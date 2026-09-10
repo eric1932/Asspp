@@ -54,10 +54,10 @@ func (e *Engine) register(_ uintptr) {
 	}
 	e.api.strerror = func(code int32) string { return C.GoString(C.uc_strerror(C.uc_err(code))) }
 	e.api.memMap = func(h uintptr, address, size uint64, protection uint32) int32 {
-		return int32(C.uc_mem_map(nativeEngine(h), C.uint64_t(address), C.size_t(size), C.uint32_t(protection)))
+		return int32(C.uc_mem_map(nativeEngine(h), C.uint64_t(address), C.uint64_t(size), C.uint32_t(protection)))
 	}
 	e.api.memUnmap = func(h uintptr, address, size uint64) int32 {
-		return int32(C.uc_mem_unmap(nativeEngine(h), C.uint64_t(address), C.size_t(size)))
+		return int32(C.uc_mem_unmap(nativeEngine(h), C.uint64_t(address), C.uint64_t(size)))
 	}
 	e.api.memRead = func(h uintptr, address uint64, pointer unsafe.Pointer, size uint64) int32 {
 		return int32(C.uc_mem_read(nativeEngine(h), C.uint64_t(address), pointer, C.uint64_t(size)))
