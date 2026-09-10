@@ -8,7 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Asspp is a multi-account App Store management app (iOS + macOS) for searching, downloading, and installing IPA files. It uses an Xcode workspace (`Asspp.xcworkspace`) with SPM dependencies including [ApplePackage](https://github.com/Lakr233/ApplePackage), the core library for App Store API communication, IPA handling, and signature injection.
 
-Bundle ID: `wiki.qaq.Asspp`. Deployment targets: iOS 17.0, macOS 15.0. Supports iPhone, iPad, and Mac (native, not Catalyst). No test targets exist.
+Bundle ID: `wiki.qaq.Asspp`. Deployment targets: iOS 17.0, macOS 15.0. Supports iPhone, iPad, and Mac (native, not Catalyst). The app has no test target; the local ApplePackage snapshot has XCTest coverage.
+
+ApplePackage is currently sourced from `Packages/ApplePackage` (see its `UPSTREAM.md`). Authentication requires the CI-built `Packages/ApplePackage/Artifacts/ApplePackageSAP.xcframework`. The app build fails explicitly if it is missing. See `Resources/SAPRuntime/README.md` for pinned sources, artifact preparation, and device validation limits. Native preparation scripts are CI-only; do not install runtimes or fetch Apple signing assets locally without authorization.
+
+Offline authentication tests: `swift test --package-path Packages/ApplePackage --filter OfflineAuthenticationTests`. They use injected signers/transports and do not need the native artifact or a simulator. On a fresh machine SwiftPM still needs to resolve dependencies; use CI when local disk is constrained. Do not run the unfiltered upstream suite as a substitute: it includes live tests.
 
 ## Build Commands
 
