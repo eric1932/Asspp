@@ -144,7 +144,7 @@ struct AddAccountView: View {
     private func progressLabel(_ progress: AuthenticationProgress) -> LocalizedStringKey {
         switch progress {
         case .loadingConfiguration: "Loading sign-in configuration…"
-        case .preparingResources: "Preparing signing resources (first use: about 38 MB)…"
+        case .preparingResources: "Preparing signing resources…"
         case .preparingSignature: "Preparing secure sign-in…"
         case .signing: "Signing sign-in request…"
         case .authenticating: "Signing in…"

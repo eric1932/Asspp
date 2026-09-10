@@ -8,13 +8,17 @@
 
 - 读取 Bag 根节点或 `urlBag` 中的 SAP 版本、setup 和 certificate 地址；配置不完整或版本不支持时明确失败。
 - 使用固定 Unicorn TCI 提交、静态 C 接口和 ipatool 的加载器与系统函数模拟；只构建 x86 客体，不使用 JIT。
-- Apple 资源按需获取，逐文件校验固定大小与 SHA-256 后缓存；不提交或分发 Apple 二进制。
+- Apple 资源支持两个构建版本：即时下载版在设备获取并缓存；内置版在 CI 获取后作为 App 资源打包。两者都校验固定大小与 SHA-256；二进制不提交进 Git，内置 IPA 则包含这些文件。
 - plist 只序列化一次，签名输入与 HTTP body 使用同一份 Data；签名 Base64 编码一次。
 - 登录、验证码重试和 token 刷新使用相同签名路径；重定向保持 POST/body 并重新签名。
 - 空响应 403、超时和签名错误结束当前尝试；保留 cookie、storefront、pod 和 Account 编码格式。
 - 原生初始化与签名在后台串行执行；支持进度、取消和释放；认证日志隐藏凭据、cookie、token 和签名。
 
 ## 验证
+
+新增 `ipa-bundled.yml` 和 `ipa-download.yml` 两个独立入口，共用 `ipa-build.yml`。
+输出 Release 未签名 IPA、提交编号和 SHA-256。内置版资源不复制到设备缓存，损坏或缺失时不回退下载。
+下面的历史回归记录早于这项内置资源改动；新版本的构建验证另行记录。
 
 [最终回归运行](https://github.com/eric1932/Asspp/actions/runs/34443603327)
 针对提交 `d02f2f3`：

@@ -1,0 +1,16 @@
+name: Build IPA - Download SAP on demand
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/ipa-variants]
+    paths: ['.github/workflows/ipa-*.yml', 'Resources/SAPRuntime/**', 'Packages/ApplePackage/**', 'Resources/Scripts/compile.release.mobile.ci.sh', 'Asspp/**']
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    uses: ./.github/workflows/ipa-build.yml
+    with:
+      bundle_sap_assets: false

@@ -25,11 +25,52 @@ unsigned credentials.
 
 ## Resource ownership
 
-The first sign-in downloads the four Apple SAP assets from the fixed Apple
-software-update URL in the pinned reference `assets.go`. Each file's exact size
-and SHA-256 are checked on download and every cache load. About 38 MB is cached
-under the app's Caches/ApplePackage/SAP/apple-assets-v2 directory. Assets are
-replaced atomically. Apple binaries are never committed or included in CI artifacts.
+There are two build variants. The download-on-demand variant obtains the four
+Apple SAP assets from the fixed Apple software-update URL in the pinned reference
+`assets.go` at first use. About 38 MB is cached under the app's
+Caches/ApplePackage/SAP/apple-assets-v2 directory.
+
+The bundled variant runs `prepare_assets.py` on the CI runner, verifies the same
+four files, and stages them in the gitignored
+`Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets/` directory.
+SwiftPM copies that directory into its resource bundle. The native bridge reads
+these files in place without writing to the app bundle or downloading replacements.
+Missing/corrupt bundled resources fail explicitly. Both variants check the fixed
+file sizes and SHA-256 values on every load. Both still contact Apple for SAP setup
+and authentication. Apple binaries are never committed to Git, but the bundled
+IPA artifact deliberately contains them.
+
+## Unsigned IPA workflows
+
+- `Build IPA - Bundled SAP` (`ipa-bundled.yml`): includes Apple resources.
+- `Build IPA - Download SAP on demand` (`ipa-download.yml`): downloads them on device.
+
+Both are manual entry points sharing `ipa-build.yml`. The feature branch
+`codex/ipa-variants` also builds both on relevant pushes for validation. Use the
+same source branch for each variant. The reusable regression workflow builds the
+native runtime from the checked-out commit and runs the offline tests. Packaging
+then builds a Release iPhone IPA without code signing. Bundled builds additionally
+test actual resource initialization and a signed request with fictional credentials.
+No real account or signing certificate is required in CI.
+
+Each successful run uploads an `Asspp-<mode>-unsigned-<commit>` artifact containing
+the IPA, `BUILD.json`, `SHA256SUMS.txt`, and the Apple resource notice, retained for
+seven days. `sap_assets.py` checks the **final IPA**: exactly one complete, hash-valid
+resource set for bundled mode, no SAP resources for download mode. Re-sign the IPA
+before installing it on a normal iPhone. Do not infer iPhone runtime success from
+a successful build.
+
+On a feature branch where GitHub has not exposed the manual button yet, the CLI
+entry points after workflow registration are:
+
+```sh
+gh workflow run ipa-bundled.yml --repo eric1932/Asspp --ref codex/ipa-variants
+gh workflow run ipa-download.yml --repo eric1932/Asspp --ref codex/ipa-variants
+```
+
+The workflow must also exist on the repository's default branch for GitHub's
+documented manual-run UI. Do not merge unrelated app changes merely to register
+the workflow. Resource preparation remains CI-only on a disk-constrained machine.
 
 One native session is allowed at a time across accounts. A serial dispatch queue
 runs expensive guest operations off the main actor. Swift task cancellation stops
@@ -95,5 +136,8 @@ code retain their GPL-2.0 and included per-file licenses. The static runtime is 
 combined artifact; the repository's MIT notice does not replace these component
 licenses. Generated artifacts include their notices and pinned source/build
 references. Preserve these notices and provide the corresponding source when
-distributing builds. Apple's downloaded assets remain local to the device and
-are not redistributed with the app.
+distributing builds. Apple's proprietary resources are **not** relicensed by any
+of these open-source licenses. The bundled variant redistributes these files;
+keeping them out of Git or retaining notices does not grant distribution rights.
+See the resource notice in `Resources/SAPNotices/Apple-SAP.txt` in ApplePackage and
+Apple's Mavericks license: https://www.apple.com/legal/sla/docs/OSX109.pdf.

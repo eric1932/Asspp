@@ -17,6 +17,11 @@ private actor SAPSessionPermit {
 }
 
 final class NativeSAPMachine: SAPMachine, @unchecked Sendable {
+    #if ASSPP_BUNDLED_SAP_ASSETS
+    static let usesBundledAssets = true
+    #else
+    static let usesBundledAssets = false
+    #endif
     private let handle: UInt64
     private let queue = DispatchQueue(label: "ApplePackage.SAP", qos: .userInitiated)
     // Accessed only on queue. Native cancellation is independently thread safe.
@@ -32,12 +37,22 @@ final class NativeSAPMachine: SAPMachine, @unchecked Sendable {
     }
 
     private init(hardware: Data) throws {
-        let cache = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        #if ASSPP_BUNDLED_SAP_ASSETS
+        guard let directory = Bundle.module.url(forResource: "SAPAssets", withExtension: nil) else {
+            throw AuthenticationError.signingFailed("Bundled SAP resources are missing. Reinstall this build.")
+        }
+        #else
+        let directory = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
             .appendingPathComponent("ApplePackage/SAP/apple-assets-v2", isDirectory: true)
+        #endif
         var error: UnsafeMutablePointer<CChar>?
         handle = hardware.withUnsafeBytes { bytes in
-            cache.path.withCString { directory in
+            directory.path.withCString { directory in
+                #if ASSPP_BUNDLED_SAP_ASSETS
+                apsap_create_bundled(bytes.bindMemory(to: UInt8.self).baseAddress, UInt64(bytes.count), directory, &error)
+                #else
                 apsap_create(bytes.bindMemory(to: UInt8.self).baseAddress, UInt64(bytes.count), directory, &error)
+                #endif
             }
         }
         try Self.check(handle != 0, error: error)

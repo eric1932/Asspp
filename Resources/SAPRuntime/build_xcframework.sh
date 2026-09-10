@@ -9,6 +9,10 @@ runtime_scripts="$(cd "$(dirname "$0")" && pwd)"
 repository="$(cd "$runtime_scripts/../.." && pwd)"
 unicorn_sources="$runtime_directory/unicorn/unicorn-engine-sys-tci"
 python3 "$runtime_scripts/prepare_static.py" "$runtime_directory"
+(
+    cd "$runtime_directory/ipatool"
+    go test -count=1 ./internal/sap/assets -run '^TestBundledAssets$'
+)
 mkdir -p "$runtime_directory/slices/include"
 cp "$runtime_scripts/ApplePackageSAP.h" "$runtime_directory/slices/include/"
 cat > "$runtime_directory/slices/include/module.modulemap" <<'MODULE'

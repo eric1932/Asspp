@@ -11,7 +11,7 @@ BUILD_PRODUCT="Asspp.app"
 
 cd $SRCROOT
 
-git clean -fdx -f -e Packages/ApplePackage/Artifacts/
+git clean -fdx -f -e Packages/ApplePackage/Artifacts/ -e Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets/
 git reset --hard
 
 # Generate Developer.xcconfig for CI (codesign completely disabled)

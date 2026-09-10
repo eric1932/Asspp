@@ -1,0 +1,22 @@
+Apple SAP resources
+
+The optional bundled build contains CommerceKit, CommerceCore, CoreFP and
+CoreFP.icxs extracted from Apple's OS X 10.9 software update. The download build
+instead obtains these same resources directly from Apple when first needed.
+These proprietary Apple components are not covered by Asspp's, ApplePackage's
+or ipatool's MIT license, nor by Unicorn's open source license.
+
+Apple software license information:
+https://www.apple.com/legal/sla/docs/OSX109.pdf
+The applicable license accompanying the software governs its use. Keeping this
+notice or using a private build does not grant redistribution permission.
+
+Source:
+https://swcdn.apple.com/content/downloads/27/34/041-98128-A_SYPWICN3KH/5dqkl4rqgbsr18yzy61yeie9g3cmjc5hiv/OSXUpd10.9.pkg
+
+Extraction reference:
+majd/ipatool d5d0b56faf64e3fdef885d49e7928b390aadb6c7
+internal/sap/assets/assets.go
+
+Every component is checked against its pinned size and SHA-256 during build
+preparation and loading. No Apple account credentials are included in these files.

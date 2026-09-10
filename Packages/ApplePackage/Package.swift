@@ -10,6 +10,8 @@ let runtimePath = "Artifacts/ApplePackageSAP.xcframework"
 let hasRuntime = FileManager.default.fileExists(atPath: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(runtimePath).path)
 let runtimeDependencies: [Target.Dependency] = hasRuntime ? [.target(name: "CApplePackageSAP")] : []
 let runtimeTargets: [Target] = hasRuntime ? [.binaryTarget(name: "CApplePackageSAP", path: runtimePath)] : []
+let hasBundledAssets = FileManager.default.fileExists(atPath: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Sources/ApplePackage/Resources/SAPAssets").path)
+let sapResources: [Resource] = [.copy("Resources/SAPNotices")] + (hasBundledAssets ? [.copy("Resources/SAPAssets")] : [])
 
 let package = Package(
     name: "ApplePackage",
@@ -39,7 +41,9 @@ let package = Package(
             .product(name: "AsyncHTTPClient", package: "async-http-client"),
             .product(name: "Collections", package: "swift-collections"),
             .product(name: "Logging", package: "swift-log"),
-        ], resources: [.copy("Resources/SAPNotices")], linkerSettings: hasRuntime ? [.linkedFramework("CoreFoundation"), .linkedLibrary("resolv")] : []),
+        ], resources: sapResources,
+           swiftSettings: hasBundledAssets ? [.define("ASSPP_BUNDLED_SAP_ASSETS")] : [],
+           linkerSettings: hasRuntime ? [.linkedFramework("CoreFoundation"), .linkedLibrary("resolv")] : []),
         .testTarget(name: "ApplePackageTests", dependencies: ["ApplePackage"]),
     ] + runtimeTargets
 )

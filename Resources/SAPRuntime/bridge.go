@@ -25,6 +25,7 @@ type session struct {
 	cancel    context.CancelFunc
 	hardware  []byte
 	directory string
+	bundled   bool
 	guest     *machine.Machine
 	context   uint64
 	ready     bool
@@ -66,6 +67,15 @@ func result(data []byte, output **C.uint8_t, count *C.uint64_t) {
 
 //export apsap_create
 func apsap_create(hardware *C.uint8_t, count C.uint64_t, directory *C.char, output **C.char) C.uint64_t {
+	return createSession(hardware, count, directory, false, output)
+}
+
+//export apsap_create_bundled
+func apsap_create_bundled(hardware *C.uint8_t, count C.uint64_t, directory *C.char, output **C.char) C.uint64_t {
+	return createSession(hardware, count, directory, true, output)
+}
+
+func createSession(hardware *C.uint8_t, count C.uint64_t, directory *C.char, bundled bool, output **C.char) C.uint64_t {
 	if output != nil {
 		*output = nil
 	}
@@ -75,11 +85,11 @@ func apsap_create(hardware *C.uint8_t, count C.uint64_t, directory *C.char, outp
 	}
 	path := C.GoString(directory)
 	if !filepath.IsAbs(path) {
-		fail(output, errors.New("SAP cache path must be absolute"))
+		fail(output, errors.New("SAP resource path must be absolute"))
 		return 0
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &session{ctx: ctx, cancel: cancel, hardware: C.GoBytes(unsafe.Pointer(hardware), C.int(count)), directory: path}
+	s := &session{ctx: ctx, cancel: cancel, hardware: C.GoBytes(unsafe.Pointer(hardware), C.int(count)), directory: path, bundled: bundled}
 	id := nextSession.Add(1)
 	sessions.Store(id, s)
 	return C.uint64_t(id)
@@ -102,7 +112,12 @@ func apsap_prepare(handle C.uint64_t, output **C.char) C.int32_t {
 	if s.closed || s.guest != nil {
 		return fail(output, errors.New("SAP session cannot be prepared twice"))
 	}
-	bundle, err := assets.LoadFromDirectory(s.ctx, s.directory)
+	var bundle assets.Bundle
+	if s.bundled {
+		bundle, err = assets.LoadBundledDirectory(s.ctx, s.directory)
+	} else {
+		bundle, err = assets.LoadFromDirectory(s.ctx, s.directory)
+	}
 	if err != nil {
 		return fail(output, err)
 	}

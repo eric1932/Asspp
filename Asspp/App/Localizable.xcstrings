@@ -81,18 +81,18 @@
         }
       }
     },
-    "Preparing signing resources (first use: about 38 MB)…" : {
+    "Preparing signing resources…" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preparing signing resources (first use: about 38 MB)…"
+            "value" : "Preparing signing resources…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在准备签名资源（首次约 38 MB）…"
+            "value" : "正在准备签名资源…"
           }
         }
       }

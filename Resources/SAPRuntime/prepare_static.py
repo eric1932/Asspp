@@ -51,6 +51,8 @@ func openLibrary(ctx context.Context) (library, error) {
 func LoadFromDirectory(ctx context.Context, directory string) (Bundle, error) {
     if err := ctx.Err(); err != nil { return Bundle{}, err }
     if bundle, err := readCache(directory); err == nil {""")
+    shutil.copyfile(wrapper / "bundled_assets.go", assets.with_name("asspp_bundled.go"))
+    shutil.copyfile(wrapper / "bundled_assets_test.go", assets.with_name("asspp_bundled_test.go"))
     machine = reference / "internal/sap/machine/machine.go"
     with machine.open("a") as output:
         output.write("\n// Stop interrupts active emulation without tearing down its state.\nfunc (m *Machine) Stop() error { return m.engine.Stop() }\n")

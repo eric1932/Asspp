@@ -1,0 +1,95 @@
+name: Build unsigned IPA implementation
+
+on:
+  workflow_call:
+    inputs:
+      bundle_sap_assets:
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipa-${{ github.ref }}-${{ inputs.bundle_sap_assets }}
+  cancel-in-progress: false
+
+jobs:
+  sap-runtime:
+    uses: ./.github/workflows/sap-authentication.yml
+    with:
+      skip_app_build: true
+
+  package:
+    needs: sap-runtime
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      SAP_MODE: ${{ inputs.bundle_sap_assets && 'bundled' || 'download' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ApplePackageSAP-xcframework
+          path: Packages/ApplePackage/Artifacts
+      - name: Verify packaging helpers offline
+        run: python3 -m unittest discover -s Resources/SAPRuntime -p 'test_*.py'
+      - uses: actions/setup-go@v5
+        if: inputs.bundle_sap_assets
+        with:
+          go-version: '1.25.0'
+          cache: false
+      - name: Fetch and verify Apple resources on the runner
+        if: inputs.bundle_sap_assets
+        run: python3 Resources/SAPRuntime/prepare_assets.py "$RUNNER_TEMP/asspp-ipa-assets"
+      - name: Test the bundled resource path and sign a fictional authentication request
+        if: inputs.bundle_sap_assets
+        working-directory: Packages/ApplePackage
+        env:
+          ASSPP_TEST_BUNDLED_RESOURCES: '1'
+          ASSPP_SAP_LIVE_PROBE: '1'
+        run: swift test --filter 'BundledSAPTests|LiveSAPTests'
+      - name: Confirm on-demand build has no bundled Apple resources
+        if: ${{ !inputs.bundle_sap_assets }}
+        run: test ! -e Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets
+      - name: Compile and package unsigned Release IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa-output"
+          zsh Resources/Scripts/compile.release.mobile.ci.sh "$PWD" "$RUNNER_TEMP/ipa-output/Asspp-$SAP_MODE.ipa"
+      - name: Verify the IPA contents and record provenance
+        run: |
+          python3 Resources/SAPRuntime/sap_assets.py ipa "$RUNNER_TEMP/ipa-output/Asspp-$SAP_MODE.ipa" "$SAP_MODE"
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'Resources/SAPRuntime')
+          from sap_assets import APPLE_UPDATE_URL, FILES
+          output = Path(os.environ['RUNNER_TEMP']) / 'ipa-output'
+          ipa = output / ('Asspp-' + os.environ['SAP_MODE'] + '.ipa')
+          digest = hashlib.sha256()
+          with ipa.open('rb') as stream:
+              while chunk := stream.read(1024 * 1024):
+                  digest.update(chunk)
+          (output / 'SHA256SUMS.txt').write_text(f'{digest.hexdigest()}  {ipa.name}\n')
+          (output / 'BUILD.json').write_text(json.dumps({
+              'commit': os.environ['GITHUB_SHA'], 'mode': os.environ['SAP_MODE'],
+              'signed': False, 'ipa_bytes': ipa.stat().st_size,
+              'run': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'apple_source': APPLE_UPDATE_URL,
+              'bundled_assets': FILES if os.environ['SAP_MODE'] == 'bundled' else {},
+          }, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'IPA: `{ipa.name}` ({ipa.stat().st_size / 1_000_000:.2f} MB)\n\n')
+              summary.write('Unsigned; re-sign before installing on a normal iPhone.\n\n')
+              summary.write('Bundled SAP assets do not remove the need for online Apple authentication.\n')
+          PY
+          cp Packages/ApplePackage/Sources/ApplePackage/Resources/SAPNotices/Apple-SAP.txt "$RUNNER_TEMP/ipa-output/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Asspp-${{ env.SAP_MODE }}-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/ipa-output/
+          if-no-files-found: error
+          retention-days: 7
