@@ -21,7 +21,7 @@ func run(_ instructions: [UInt8], expected: UInt64) throws {
     let address: UInt64 = 0x10000
     try checked(uc_mem_map(engine, address, 0x10000, UInt32(UC_PROT_ALL.rawValue)))
     try instructions.withUnsafeBytes { bytes in
-        try checked(uc_mem_write(engine, address, bytes.baseAddress, bytes.count))
+        try checked(uc_mem_write(engine, address, bytes.baseAddress, numericCast(bytes.count)))
     }
     try checked(uc_emu_start(engine, address, address + UInt64(instructions.count), 5_000_000, 10_000))
     var result: UInt64 = 0
