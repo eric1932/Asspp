@@ -11,7 +11,9 @@ directory and do not install the emulator system-wide.
 ## What runs
 
 1. Fetch exactly Unicorn TCI `6d0794492de065cdf7e05d7658b4c1b157a34062` and
-   ipatool `d5d0b56faf64e3fdef885d49e7928b390aadb6c7` (v2.5.0).
+   ipatool `d5d0b56faf64e3fdef885d49e7928b390aadb6c7` (v2.5.0). The TCI snapshot
+   omits `qemu/target`; restore its x86 guest sources from Unicorn 2.1.4 commit
+   `8028ec436f2d9376525352dd38ed9ed6b9f6be10`, retaining the fork's TCI changes.
 2. Build only the x86 guest interpreter with `UNICORN_INTERPRETER=ON`; fail if
    the generated configuration does not confirm `CONFIG_TCG_INTERPRETER=1`.
 3. Exercise the C API from Swift, including a long straight-line guest block.

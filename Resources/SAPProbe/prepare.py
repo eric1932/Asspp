@@ -11,6 +11,7 @@ import urllib.request
 
 
 UNICORN_REVISION = "6d0794492de065cdf7e05d7658b4c1b157a34062"
+UNICORN_BASE_REVISION = "8028ec436f2d9376525352dd38ed9ed6b9f6be10"
 IPATOOL_REVISION = "d5d0b56faf64e3fdef885d49e7928b390aadb6c7"
 
 
@@ -88,6 +89,13 @@ def main():
         raise SystemExit("Probe output must be a child of RUNNER_TEMP")
     root.mkdir(parents=True, exist_ok=False)
     fetch_source("1rhino2/unicorn-tci", UNICORN_REVISION, root / "unicorn")
+    # The TCI snapshot omits qemu/target (its Rust .gitignore matches target/).
+    # Restore only the x86 guest from the exact 2.1.4 base, keeping all TCI changes.
+    fetch_source("unicorn-engine/unicorn", UNICORN_BASE_REVISION, root / "unicorn-base")
+    shutil.copytree(
+        root / "unicorn-base/qemu/target/i386",
+        root / "unicorn/unicorn-engine-sys-tci/qemu/target/i386",
+    )
     fetch_source("majd/ipatool", IPATOOL_REVISION, root / "ipatool")
     patch_loader(root / "ipatool")
     shutil.copyfile(
