@@ -12,12 +12,15 @@ extension Configuration {
     /// Shared HTTP/1.1-only client used by all store requests.
     /// Callers own the returned client and must shut it down.
     static func makeHTTPClient(
-        redirectConfiguration: HTTPClient.Configuration.RedirectConfiguration
+        redirectConfiguration: HTTPClient.Configuration.RedirectConfiguration,
+        requireCertificateVerification: Bool = false
     ) -> HTTPClient {
-        HTTPClient(
+        var tls = tlsConfiguration
+        if requireCertificateVerification { tls.certificateVerification = .fullVerification }
+        return HTTPClient(
             eventLoopGroupProvider: .singleton,
             configuration: .init(
-                tlsConfiguration: tlsConfiguration,
+                tlsConfiguration: tls,
                 redirectConfiguration: redirectConfiguration,
                 timeout: .init(
                     connect: .seconds(timeoutConnect),

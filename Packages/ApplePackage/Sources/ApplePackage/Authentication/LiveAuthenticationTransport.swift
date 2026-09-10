@@ -3,7 +3,7 @@ import Foundation
 import NIOHTTP1
 
 final class LiveAuthenticationTransport: AuthenticationTransport, @unchecked Sendable {
-    private let client = Configuration.makeHTTPClient(redirectConfiguration: .disallow)
+    private let client = Configuration.makeHTTPClient(redirectConfiguration: .disallow, requireCertificateVerification: true)
 
     func send(_ request: AuthenticationRequest) async throws -> AuthenticationResponse {
         try Task.checkCancellation()
@@ -14,9 +14,9 @@ final class LiveAuthenticationTransport: AuthenticationTransport, @unchecked Sen
             headers: HTTPHeaders(request.headers),
             body: request.body.map { .data($0) }
         )
-        let task = client.execute(request: outgoing)
+        let task = client.execute(request: outgoing, delegate: ResponseAccumulator(request: outgoing, maxBodySize: 1_048_576))
         let response = try await withTaskCancellationHandler {
-            try await task.get()
+            try await task.futureResult.get()
         } onCancel: {
             task.cancel()
         }

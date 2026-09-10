@@ -8,8 +8,10 @@ public enum Authenticator {
         cookies: [Cookie] = [],
         progress: @escaping @Sendable (AuthenticationProgress) -> Void = { _ in }
     ) async throws -> Account {
-        try await authenticate(email: email, password: password, code: code, cookies: cookies, environment: AuthenticationEnvironment(
-            deviceIdentifier: Configuration.deviceIdentifier,
+        let deviceIdentifier = Configuration.deviceIdentifier
+        _ = try AuthenticationValidation.hardwareIdentifier(deviceIdentifier)
+        return try await authenticate(email: email, password: password, code: code, cookies: cookies, environment: AuthenticationEnvironment(
+            deviceIdentifier: deviceIdentifier,
             userAgent: Configuration.userAgent,
             transport: LiveAuthenticationTransport(),
             makeSigner: { try await LocalSAPSigner.prepare(configuration: $0, hardware: $1, transport: $2, userAgent: $3, progress: $4) },
