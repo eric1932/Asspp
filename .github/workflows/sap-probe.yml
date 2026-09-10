@@ -1,0 +1,69 @@
+name: SAP interpreter probe
+
+on:
+  push:
+    branches: [codex/sap-auth-403, codex/sap-auth-403-live]
+    paths:
+      - Resources/SAPProbe/**
+      - .github/workflows/sap-probe.yml
+  workflow_dispatch:
+    inputs:
+      live_signing:
+        description: Fetch Apple SAP assets and test a signed request using fictional credentials
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sap-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  interpreter:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      SAP_PROBE_DIRECTORY: ${{ runner.temp }}/asspp-sap-probe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned reference sources
+        run: python3 Resources/SAPProbe/prepare.py "$SAP_PROBE_DIRECTORY"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/asspp-sap-probe/ipatool/go.mod
+          cache: false
+      - name: Build interpreter and exercise Swift C bridge
+        run: bash Resources/SAPProbe/build.sh "$SAP_PROBE_DIRECTORY"
+      - name: Test guest loader and system function emulation
+        working-directory: ${{ runner.temp }}/asspp-sap-probe/ipatool
+        run: |
+          set -euo pipefail
+          export ASSPP_SAP_UNICORN_LIBRARY="$(cat "$SAP_PROBE_DIRECTORY/library-path.txt")"
+          go test -count=1 -timeout=10m ./internal/sap/machimage ./internal/sap/cpio ./internal/sap/machine
+      - name: Test real SAP signing and Apple request validation
+        if: inputs.live_signing || github.ref == 'refs/heads/codex/sap-auth-403-live'
+        working-directory: ${{ runner.temp }}/asspp-sap-probe/ipatool
+        run: |
+          set -euo pipefail
+          export ASSPP_SAP_UNICORN_LIBRARY="$(cat "$SAP_PROBE_DIRECTORY/library-path.txt")"
+          export ASSPP_SAP_LIVE_PROBE=1
+          go test -v -count=1 -timeout=15m ./internal/sap -run '^TestAssppSignedAuthentication$'
+      - name: Record validation scope
+        if: always()
+        env:
+          PROBE_STATUS: ${{ job.status }}
+          LIVE_SIGNING: ${{ inputs.live_signing || github.ref == 'refs/heads/codex/sap-auth-403-live' }}
+        run: |
+          python3 - <<'PY'
+          import os
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write('## SAP interpreter validation\n\n')
+              report.write(f"Job status: {os.environ['PROBE_STATUS']}\n\n")
+              report.write(f"Live signing requested: {os.environ['LIVE_SIGNING']}\n\n")
+              report.write('This is a macOS engine feasibility probe, not an Asspp login fix or an iOS device validation.\n')
+          PY
