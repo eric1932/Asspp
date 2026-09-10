@@ -1,6 +1,38 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "If Apple sent you a verification code, enter it here. Otherwise, check your Apple ID and password.\n\nhttps://support.apple.com/102606" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If Apple sent you a verification code, enter it here. Otherwise, check your Apple ID and password.\n\nhttps://support.apple.com/102606"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 Apple 已向你发送验证码，请在这里输入；否则，请检查 Apple ID 和密码。\n\nhttps://support.apple.com/102606"
+          }
+        }
+      }
+    },
+    "Enter Verification Code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter Verification Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入验证码"
+          }
+        }
+      }
+    },
     "Signing in…" : {
       "localizations" : {
         "en" : {

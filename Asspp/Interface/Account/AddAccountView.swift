@@ -77,13 +77,17 @@ struct AddAccountView: View {
                 } header: {
                     Text("2FA Code")
                 } footer: {
-                    Text("Although the 2FA code is marked as optional, it's because we don't know if you have it enabled or just entered an incorrect password. Provide it if you have 2FA enabled.\n\nhttps://support.apple.com/102606")
+                    Text("If Apple sent you a verification code, enter it here. Otherwise, check your Apple ID and password.\n\nhttps://support.apple.com/102606")
                 }
                 .transition(.opacity)
             }
             Section {
                 Button("Authenticate", action: authenticate)
                     .disabled(email.isEmpty || password.isEmpty || authenticationTask != nil)
+                if !codeRequired, error as? ApplePackage.AuthenticationError == .credentialsRejected {
+                    Button("Enter Verification Code") { codeRequired = true }
+                        .disabled(authenticationTask != nil)
+                }
                 if authenticationTask != nil {
                     HStack {
                         ProgressView()
@@ -129,7 +133,7 @@ struct AddAccountView: View {
             } catch {
                 self.error = error
                 if let authenticationError = error as? ApplePackage.AuthenticationError,
-                   authenticationError == .verificationCodeRequired || authenticationError == .invalidVerificationCode {
+                   authenticationError == .invalidVerificationCode {
                     codeRequired = true
                 }
                 logger.error("authentication failed")

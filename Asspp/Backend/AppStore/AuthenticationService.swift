@@ -25,6 +25,7 @@ extension AppStore {
                 cookies: [],
                 progress: progress,
             )
+            try Task.checkCancellation()
             let userAccount = save(email: email, account: appleAccount)
             logger.info("authentication successful for user")
             return userAccount
@@ -49,6 +50,7 @@ extension AppStore {
                 code: "",
                 cookies: account.account.cookie,
             )
+            try Task.checkCancellation()
             let updatedAccount = save(email: account.account.email, account: newAppleAccount)
             logger.info("account rotation successful for user id: \(id)")
             return updatedAccount
