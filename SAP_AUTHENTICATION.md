@@ -18,7 +18,32 @@
 
 新增 `ipa-bundled.yml` 和 `ipa-download.yml` 两个独立入口，共用 `ipa-build.yml`。
 输出 Release 未签名 IPA、提交编号和 SHA-256。内置版资源不复制到设备缓存，损坏或缺失时不回退下载。
-下面的历史回归记录早于这项内置资源改动；新版本的构建验证另行记录。
+
+提交 `e555aefe394fe7eb6569658f0f886346b79dab52` 的两个版本均已构建成功：
+
+| 版本 | IPA 大小（十进制 MB） | 构建与下载 |
+| --- | --- | --- |
+| 内置资源 | 39,686,556 字节 / 39.69 MB | [运行记录](https://github.com/eric1932/Asspp/actions/runs/34449131853)、[下载附件](https://github.com/eric1932/Asspp/actions/runs/34449131853/artifacts/10141465847) |
+| 即时下载 | 18,179,853 字节 / 18.18 MB | [运行记录](https://github.com/eric1932/Asspp/actions/runs/34449131859)、[下载附件](https://github.com/eric1932/Asspp/actions/runs/34449131859/artifacts/10141287409) |
+
+内置版 IPA 增加 21,506,703 字节，约 21.51 MB；这是压缩包增量，Apple 资源展开后约 37.78 MB。
+GitHub 附件是再封装的 ZIP，大小会与里面的 IPA 略有不同。附件保留到 2026-09-17 左右，
+其中包含 `BUILD.json`、`SHA256SUMS.txt` 和资源来源说明。
+
+- 两个 workflow 的 17 个离线 XCTest 在有、无原生库时均通过；原生库五个架构切片编译通过。
+- Go 测试验证内置资源的只读加载、缺失、同长度损坏和取消；禁止网络访问。
+- 内置版本另外通过真实资源初始化、虚构凭据签名认证两个集成测试（无真实账号）。
+- 最终内置 IPA 的四个文件逐一通过固定哈希校验；即时下载 IPA 检查确认没有内置这些文件。
+- 本机只运行 4 个新增 Python 离线检查、7 个已有准备脚本检查和语法检查；未安装依赖、下载 IPA 或 Apple 大型资源。
+
+IPA SHA-256：
+
+```text
+9e423ced7080d3c0121970d7effbce1416cbfb9b0513c5d5266ef9818e19d258  Asspp-bundled.ipa
+b79e81b41bdc333a316c3fa75681a6581066b5ea7408bee1fe1bee7e78be4a88  Asspp-download.ipa
+```
+
+以下是内置资源改动之前的历史验证记录。
 
 [最终回归运行](https://github.com/eric1932/Asspp/actions/runs/34443603327)
 针对提交 `d02f2f3`：
