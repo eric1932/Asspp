@@ -7,12 +7,22 @@ on:
     branches: [main]
 
 jobs:
+  sap-runtime:
+    uses: ./.github/workflows/sap-authentication.yml
+
   build-ios:
+    needs: sap-runtime
     runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download the validated SAP runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: ApplePackageSAP-xcframework
+          path: Packages/ApplePackage/Artifacts
 
       - name: Select newest non-beta Xcode
         run: |
@@ -62,11 +72,18 @@ jobs:
           path: Asspp.ipa
 
   build-osx:
+    needs: sap-runtime
     runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download the validated SAP runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: ApplePackageSAP-xcframework
+          path: Packages/ApplePackage/Artifacts
 
       - name: Select newest non-beta Xcode
         run: |

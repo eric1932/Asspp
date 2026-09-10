@@ -1,5 +1,4 @@
 {
-  "originHash" : "86e6fc1bbfdf6ad53749b0c1f573995380840323103579bfac9d87fdc5f195ad",
   "pins" : [
     {
       "identity" : "anycodable",
@@ -8,15 +7,6 @@
       "state" : {
         "revision" : "862808b2070cd908cb04f9aafe7de83d35f81b05",
         "version" : "0.6.7"
-      }
-    },
-    {
-      "identity" : "applepackage",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Lakr233/ApplePackage",
-      "state" : {
-        "revision" : "28710fec47fa89dfdedf2bf47cc284a2334ddfdc",
-        "version" : "1.2.7"
       }
     },
     {

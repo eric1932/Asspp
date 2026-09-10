@@ -15,7 +15,7 @@ extension AppStore {
     }
 
     @MainActor
-    func authenticate(email: String, password: String, code: String) async throws -> UserAccount {
+    func authenticate(email: String, password: String, code: String, progress: @escaping @Sendable (ApplePackage.AuthenticationProgress) -> Void = { _ in }) async throws -> UserAccount {
         logger.info("starting authentication for user")
         do {
             let appleAccount = try await ApplePackage.Authenticator.authenticate(
@@ -23,12 +23,13 @@ extension AppStore {
                 password: password,
                 code: code,
                 cookies: [],
+                progress: progress,
             )
             let userAccount = save(email: email, account: appleAccount)
             logger.info("authentication successful for user")
             return userAccount
         } catch {
-            logger.error("authentication failed for user: \(error.localizedDescription)")
+            logger.error("authentication failed for user")
             throw error
         }
     }
@@ -52,7 +53,7 @@ extension AppStore {
             logger.info("account rotation successful for user id: \(id)")
             return updatedAccount
         } catch {
-            logger.error("account rotation failed for user id: \(id): \(error.localizedDescription)")
+            logger.error("account rotation failed")
             throw error
         }
     }

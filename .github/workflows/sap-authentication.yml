@@ -1,10 +1,11 @@
 name: SAP authentication regression
 on:
+  workflow_call:
   push:
     branches: [codex/sap-auth-403]
-    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', '.github/workflows/sap-authentication.yml']
+    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', 'Asspp/**', 'Asspp.xcodeproj/**', '.github/workflows/sap-authentication.yml']
   pull_request:
-    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', '.github/workflows/sap-authentication.yml']
+    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', 'Asspp/**', 'Asspp.xcodeproj/**', '.github/workflows/sap-authentication.yml']
   workflow_dispatch:
     inputs:
       live_signing:
@@ -58,3 +59,34 @@ jobs:
             Packages/ApplePackage/Artifacts/ApplePackageSAP.xcframework
             Packages/ApplePackage/Artifacts/NOTICES
           retention-days: 7
+
+  app-build:
+    needs: [offline, native]
+    runs-on: macos-26
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        destination: ['generic/platform=iOS', 'generic/platform=macOS']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ApplePackageSAP-xcframework
+          path: Packages/ApplePackage/Artifacts
+      - name: Compile Asspp without signing or a simulator runtime
+        env:
+          BUILD_DESTINATION: ${{ matrix.destination }}
+        run: |
+          set -euo pipefail
+          cat > Configuration/Developer.xcconfig <<'CONFIG'
+          DEVELOPMENT_TEAM =
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          CODE_SIGN_IDENTITY =
+          CONFIG
+          xcodebuild -workspace Asspp.xcworkspace -scheme Asspp -configuration Debug \
+            -destination "$BUILD_DESTINATION" -derivedDataPath "$RUNNER_TEMP/AssppBuild" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ENABLE_USER_SCRIPT_SANDBOXING=NO build | xcbeautify

@@ -6,7 +6,6 @@
 //
 
 import ApplePackage
-import ButtonKit
 import SwiftUI
 
 struct AddAccountView: View {
@@ -21,11 +20,14 @@ struct AddAccountView: View {
     @State private var code: String = ""
 
     @State private var error: Error?
+    @State private var progress: AuthenticationProgress?
+    @State private var authenticationTask: Task<Void, Never>?
 
     var body: some View {
         Form {
             Section {
                 TextField("Email (Apple ID)", text: $email)
+                    .disabled(authenticationTask != nil)
                 #if os(iOS)
                     .disableAutocorrection(true)
                     .autocapitalization(.none)
@@ -34,6 +36,7 @@ struct AddAccountView: View {
                 #endif
                 if isPasswordHidden {
                     SecureField("Password", text: $password)
+                        .disabled(authenticationTask != nil)
                     #if os(iOS)
                         .textContentType(.password)
                     #endif
@@ -48,6 +51,7 @@ struct AddAccountView: View {
                     .textContentType(.password)
                     #endif
                     .font(.body.monospaced())
+                    .disabled(authenticationTask != nil)
                 }
             } header: {
                 HStack {
@@ -64,6 +68,7 @@ struct AddAccountView: View {
             if codeRequired {
                 Section {
                     TextField("2FA Code (Optional)", text: $code)
+                        .disabled(authenticationTask != nil)
                     #if os(iOS)
                         .disableAutocorrection(true)
                         .autocapitalization(.none)
@@ -77,23 +82,15 @@ struct AddAccountView: View {
                 .transition(.opacity)
             }
             Section {
-                AsyncButton {
-                    logger.info("starting authentication for user")
-                    do {
-                        _ = try await vm.authenticate(email: email, password: password, code: code.isEmpty ? "" : code)
-                        logger.info("authentication successful for user")
-                        dismiss()
-                    } catch {
-                        logger.error("authentication failed: \(error.localizedDescription)")
-                        self.error = error
-                        codeRequired = true
-                        throw error
+                Button("Authenticate", action: authenticate)
+                    .disabled(email.isEmpty || password.isEmpty || authenticationTask != nil)
+                if authenticationTask != nil {
+                    HStack {
+                        ProgressView()
+                        if let progress { Text(progressLabel(progress)) }
                     }
-                } label: {
-                    Text("Authenticate")
+                    Button("Cancel") { authenticationTask?.cancel() }
                 }
-                .disabledWhenLoading()
-                .disabled(email.isEmpty || password.isEmpty)
             } footer: {
                 if let error {
                     Text(error.localizedDescription)
@@ -107,10 +104,47 @@ struct AddAccountView: View {
         }
         .formStyle(.grouped)
         .animation(.spring, value: codeRequired)
+        .onDisappear { authenticationTask?.cancel() }
+        .onChange(of: email) { codeRequired = false; code = "" }
+        .onChange(of: password) { codeRequired = false; code = "" }
         #if os(iOS)
             .listStyle(.insetGrouped)
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .navigationTitle("Add Account")
     }
+
+    private func authenticate() {
+        error = nil
+        authenticationTask = Task { @MainActor in
+            defer { progress = nil; authenticationTask = nil }
+            do {
+                _ = try await vm.authenticate(email: email, password: password, code: code) { phase in
+                    Task { @MainActor in progress = phase }
+                }
+                try Task.checkCancellation()
+                dismiss()
+            } catch is CancellationError {
+                // A user cancellation is not a failed login or a code challenge.
+            } catch {
+                self.error = error
+                if let authenticationError = error as? ApplePackage.AuthenticationError,
+                   authenticationError == .verificationCodeRequired || authenticationError == .invalidVerificationCode {
+                    codeRequired = true
+                }
+                logger.error("authentication failed")
+            }
+        }
+    }
+
+    private func progressLabel(_ progress: AuthenticationProgress) -> LocalizedStringKey {
+        switch progress {
+        case .loadingConfiguration: "Loading sign-in configuration…"
+        case .preparingResources: "Preparing signing resources (first use: about 38 MB)…"
+        case .preparingSignature: "Preparing secure sign-in…"
+        case .signing: "Signing sign-in request…"
+        case .authenticating: "Signing in…"
+        }
+    }
+
 }

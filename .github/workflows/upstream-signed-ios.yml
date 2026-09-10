@@ -318,6 +318,18 @@ jobs:
             echo "build_number=${GITHUB_RUN_NUMBER}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Prepare SAP runtime sources when required by the selected source
+        if: hashFiles('source/Resources/SAPRuntime/build_xcframework.sh') != ''
+        run: python3 source/Resources/SAPProbe/prepare.py "$RUNNER_TEMP/asspp-sap-runtime"
+      - uses: actions/setup-go@v5
+        if: hashFiles('source/Resources/SAPRuntime/build_xcframework.sh') != ''
+        with:
+          go-version-file: ${{ runner.temp }}/asspp-sap-runtime/ipatool/go.mod
+          cache: false
+      - name: Build the selected source's SAP runtime
+        if: hashFiles('source/Resources/SAPRuntime/build_xcframework.sh') != ''
+        run: bash source/Resources/SAPRuntime/build_xcframework.sh "$RUNNER_TEMP/asspp-sap-runtime"
+
       - name: Archive iOS app
         working-directory: source
         env:
