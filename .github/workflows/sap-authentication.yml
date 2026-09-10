@@ -1,0 +1,60 @@
+name: SAP authentication regression
+on:
+  push:
+    branches: [codex/sap-auth-403]
+    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', '.github/workflows/sap-authentication.yml']
+  pull_request:
+    paths: ['Packages/ApplePackage/**', 'Resources/SAPRuntime/**', '.github/workflows/sap-authentication.yml']
+  workflow_dispatch:
+    inputs:
+      live_signing:
+        description: Test Swift SAP authentication with fictional credentials against Apple
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: sap-authentication-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run offline authentication tests without the native runtime
+        working-directory: Packages/ApplePackage
+        run: swift test --filter OfflineAuthenticationTests
+  native:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned native sources
+        run: python3 Resources/SAPProbe/prepare.py "$RUNNER_TEMP/asspp-sap-runtime"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/asspp-sap-runtime/ipatool/go.mod
+          cache: false
+      - name: Cross-compile the interpreter for macOS, iOS and iOS Simulator
+        run: bash Resources/SAPRuntime/build_xcframework.sh "$RUNNER_TEMP/asspp-sap-runtime"
+      - name: Test the Swift package with the native module linked
+        working-directory: Packages/ApplePackage
+        run: swift test --filter OfflineAuthenticationTests
+      - name: Test actual Swift SAP authentication
+        if: inputs.live_signing
+        env:
+          ASSPP_SAP_LIVE_PROBE: '1'
+        working-directory: Packages/ApplePackage
+        run: swift test --filter LiveSAPTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApplePackageSAP-xcframework
+          path: |
+            Packages/ApplePackage/Artifacts/ApplePackageSAP.xcframework
+            Packages/ApplePackage/Artifacts/NOTICES
+          retention-days: 7
