@@ -25,12 +25,14 @@ jobs:
   interpreter:
     runs-on: macos-15
     timeout-minutes: 30
-    env:
-      SAP_PROBE_DIRECTORY: ${{ runner.temp }}/asspp-sap-probe
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Validate preparation and select temporary directory
+        run: |
+          python3 -m unittest discover -s Resources/SAPProbe -p 'test_*.py'
+          echo "SAP_PROBE_DIRECTORY=$RUNNER_TEMP/asspp-sap-probe" >> "$GITHUB_ENV"
       - name: Prepare pinned reference sources
         run: python3 Resources/SAPProbe/prepare.py "$SAP_PROBE_DIRECTORY"
       - uses: actions/setup-go@v5
