@@ -9,17 +9,75 @@
 - 读取 Bag 根节点或 `urlBag` 中的 SAP 版本、setup 和 certificate 地址；配置不完整或版本不支持时明确失败。
 - 使用固定 Unicorn TCI 提交、静态 C 接口和 ipatool 的加载器与系统函数模拟；只构建 x86 客体，不使用 JIT。
 - Apple 资源支持两个构建版本：即时下载版在设备获取并缓存；内置版在 CI 获取后作为 App 资源打包。两者都校验固定大小与 SHA-256；二进制不提交进 Git，内置 IPA 则包含这些文件。
-- plist 只序列化一次，签名输入与 HTTP body 使用同一份 Data；签名 Base64 编码一次。
+- 每次认证尝试的 plist 只序列化一次，签名输入与 HTTP body 使用同一份 Data；重定向复用 body，后续尝试修改 attempt 后重新序列化并签名。签名 Base64 编码一次。
 - 登录、验证码重试和 token 刷新使用相同签名路径；重定向保持 POST/body 并重新签名。
 - 空响应 403、超时和签名错误结束当前尝试；保留 cookie、storefront、pod 和 Account 编码格式。
 - 原生初始化与签名在后台串行执行；支持进度、取消和释放；认证日志隐藏凭据、cookie、token 和签名。
 
-## 验证
+## 真机反馈后的修正（2026-09-10）
+
+用户通过全能签 / AllinSign 侧载后的反馈显示两个不同阶段的问题：
+
+- 内置版在两个账号上均因 CommerceKit 大小不匹配失败：实际 3,284,320 字节，
+  固定值 3,271,840 字节。增加的 12,480 字节符合重签工具改写 Mach-O 的特征；
+  尚未检查用户重签后的 IPA，因此不能将具体工具行为当作已确认事实。
+- 即时下载版在无 2FA 的 CN 账号上完成 token 轮换；US 账号轮换返回凭据错误，
+  用户未收到验证码。截图均来自“账户详情 / 轮换令牌”，无法证明重新输入当前密码的登录也失败。
+
+提交 `45884535e7e146c3a302f52551e370df3d4f8c8b` 将内置资源改成单个
+`SAPAssets.zip`。运行时只在内存解压，保留全部固定大小和 SHA-256 校验；不写入下载版缓存，
+不接受被重签修改的文件。CI 对应用副本进行 ad-hoc 重签后再核对所有 SAP 字节。
+这覆盖 Apple codesign 的重签路径；全能签的实际行为仍需用户在设备上复测。
+
+账户详情新增“重新验证账户”：保留邮箱，重新输入当前普通登录密码和可选验证码。
+验证成功才更新保存的账户，失败或取消不会先删除账户。验证码可在首次请求前主动填写，
+不再需要先触发一次错误。轮换成功提示改为绿色。
+
+认证请求从 `attempt=1` 开始，仅在首次收到 `failureType=-5000` 时继续一次
+`attempt=2` 请求；后续请求重新签名，并保留 cookie、storefront、pod。重定向不消耗该次后续机会，
+也不改变当次 body；403 和超时仍直接结束。这参考了
+[固定版本 ipatool 的登录实现](https://github.com/majd/ipatool/blob/d5d0b56faf64e3fdef885d49e7928b390aadb6c7/pkg/appstore/appstore_login.go)，
+不能据此保证 Apple 会发送验证码，也没有把普通凭据错误标为 2FA 挑战。
+
+该接口使用普通账户密码，应用专用密码不受参考实现支持，见
+[ipatool FAQ](https://github.com/majd/ipatool/wiki/FAQ#can-i-use-app-specific-passwords-to-login)。
+不向 CI 提供真实账号、密码或验证码。
+
+本机通过 7 项 Python 打包测试、Swift 语法、YAML 和脚本语法检查；未拉取 SwiftPM
+依赖、原生库或 Apple 资源。首轮 CI 的 Go 资源测试和五个原生架构切片通过；
+随后因新增 Swift 测试的初始化参数顺序错误停止。`cc06343` 已修正该测试。
+
+以下最终结果针对提交 `cc063432eeccc0fb9479fb48baea6c643681fff0`，两个 workflow 均成功：
+
+| 版本 | IPA 大小 | 构建与下载 |
+| --- | --- | --- |
+| 内置 ZIP 资源 | 39,711,265 字节 / 39.71 MB | [运行记录](https://github.com/eric1932/Asspp/actions/runs/34565995303)、[下载附件](https://github.com/eric1932/Asspp/actions/runs/34565995303/artifacts/10186486221) |
+| 即时下载 | 18,234,266 字节 / 18.23 MB | [运行记录](https://github.com/eric1932/Asspp/actions/runs/34565995430)、[下载附件](https://github.com/eric1932/Asspp/actions/runs/34565995430/artifacts/10186340131) |
+
+- 19 项离线 XCTest 在有、无原生库时均通过；两个版本各运行一遍。
+- Go ZIP 加载器测试通过，原生库五个架构切片编译通过。
+- 内置 ZIP 的真实资源初始化和虚构凭据签名认证两项集成测试通过。
+- 两个 iPhone Release App 编译和最终 IPA 资源校验通过；本轮没有另行构建 macOS App。
+- 对原始 CommerceKit 副本重签，确实改变字节；对新 App 副本重签，ZIP 及四个原始资源均保持有效。
+  上传的是原始未签名 IPA，测试用 ad-hoc 签名没有进入交付附件。
+- 附件中的 `BUILD.json` 确认提交与模式；内置版记录 `sap_resource_format: zip`。
+  本机仅通过 HTTP Range 读取两份附件中的 735 / 968 字节元数据，没有下载 IPA。
+
+```text
+2cc8a2f669e59331652fca441e6346cadc69e0a6efac731b20c6c43c28d701b4  Asspp-bundled.ipa
+fe0989e19f17c52690ca847e6487285354f9eba3d53c5d81419c042fecfe9226  Asspp-download.ipa
+```
+
+附件保留 7 天。解压附件获得 IPA 后重新签名安装；可通过“账户详情 → 重新验证账户”测试当前密码和验证码。
+仍需真机确认全能签重签后的内置版，以及 US 账号的验证码推送、登录和 token 刷新。
+
+## 历史验证
 
 新增 `ipa-bundled.yml` 和 `ipa-download.yml` 两个独立入口，共用 `ipa-build.yml`。
 输出 Release 未签名 IPA、提交编号和 SHA-256。内置版资源不复制到设备缓存，损坏或缺失时不回退下载。
 
-提交 `e555aefe394fe7eb6569658f0f886346b79dab52` 的两个版本均已构建成功：
+旧提交 `e555aefe394fe7eb6569658f0f886346b79dab52` 的两个版本曾构建成功。
+其中内置版包含原始 Mach-O 文件，已有上述侧载后损坏报告；以下附件仅保留为历史证据：
 
 | 版本 | IPA 大小（十进制 MB） | 构建与下载 |
 | --- | --- | --- |
