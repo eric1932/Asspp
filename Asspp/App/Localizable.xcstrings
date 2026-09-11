@@ -1,6 +1,54 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "If rotation fails, reauthenticate with your current password and a verification code if available. You do not need to delete this account." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If rotation fails, reauthenticate with your current password and a verification code if available. You do not need to delete this account."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果轮换失败，请使用当前密码重新验证账户；如有验证码，可以一并输入。无需先删除账户。"
+          }
+        }
+      }
+    },
+    "Enter your current Apple Account password. Your saved account is updated only after a successful sign-in." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter your current Apple Account password. Your saved account is updated only after a successful sign-in."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入当前的 Apple 账户登录密码。只有验证成功后，才会更新已保存的账户。"
+          }
+        }
+      }
+    },
+    "Reauthenticate Account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reauthenticate Account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新验证账户"
+          }
+        }
+      }
+    },
     "If Apple sent you a verification code, enter it here. Otherwise, check your Apple ID and password.\n\nhttps://support.apple.com/102606" : {
       "localizations" : {
         "en" : {

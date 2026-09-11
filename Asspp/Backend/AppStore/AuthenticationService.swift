@@ -38,9 +38,9 @@ extension AppStore {
     @MainActor
     @discardableResult
     func rotate(id: UserAccount.ID) async throws -> UserAccount? {
-        logger.info("starting account rotation for user id: \(id)")
+        logger.info("starting account rotation")
         guard let account = accounts.first(where: { $0.id == id }) else {
-            logger.error("account not found for rotation, id: \(id)")
+            logger.error("account not found for rotation")
             throw AuthenticationError.accountNotFound
         }
         do {
@@ -52,7 +52,7 @@ extension AppStore {
             )
             try Task.checkCancellation()
             let updatedAccount = save(email: account.account.email, account: newAppleAccount)
-            logger.info("account rotation successful for user id: \(id)")
+            logger.info("account rotation successful")
             return updatedAccount
         } catch {
             logger.error("account rotation failed")

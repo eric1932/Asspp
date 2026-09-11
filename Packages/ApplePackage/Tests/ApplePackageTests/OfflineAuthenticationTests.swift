@@ -133,7 +133,7 @@ final class OfflineAuthenticationTests: XCTestCase {
         XCTAssertEqual(sent["password"] as? String, password)
         XCTAssertEqual(sent["appleId"] as? String, "a&b@example.invalid")
         XCTAssertEqual(sent["guid"] as? String, testGUID)
-        XCTAssertEqual(sent["attempt"] as? String, "4")
+        XCTAssertEqual(sent["attempt"] as? String, "1")
         XCTAssertEqual(requests[2].headers.first { $0.0 == "Cookie" }?.1, "session=offline")
         XCTAssertEqual(account.pod, "71")
         XCTAssertEqual(account.store, "143441")
@@ -146,16 +146,48 @@ final class OfflineAuthenticationTests: XCTestCase {
 
     func testVerificationCodeChangesTheSignedBody() async throws {
         var bodies: [Data] = []
-        for code in ["", "123456"] {
+        for code in ["", "123456", "123 456\n"] {
             let transport = try ScriptedTransport([bagResponse(), successResponse()]); let signer = RecordingSigner()
-            _ = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", code: code, environment: environment(transport, signer))
+            let account = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", code: code, environment: environment(transport, signer))
             let inputs = await signer.inputs
             let body = try XCTUnwrap(inputs.first); bodies.append(body)
             let values = try AuthenticationValidation.plist(body)
-            XCTAssertEqual(values["password"] as? String, "secret" + code)
-            XCTAssertEqual(values["attempt"] as? String, code.isEmpty ? "4" : "2")
+            XCTAssertEqual(values["password"] as? String, "secret" + (code.isEmpty ? "" : "123456"))
+            XCTAssertEqual(values["attempt"] as? String, "1")
+            XCTAssertEqual(account.password, "secret", "Never save the one-time code as part of the password")
+            let requests = await transport.requests
+            XCTAssertEqual(requests[1].body, body)
         }
         XCTAssertNotEqual(bodies[0], bodies[1])
+    }
+
+    func testCredentialFollowupIsResignedAndPreservesRedirectState() async throws {
+        let podURL = "https://p71-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate"
+        let cookie = Cookie(name: "session", value: "followup", path: "/", domain: ".itunes.apple.com", httpOnly: true, secure: true)
+        let redirect = AuthenticationResponse(status: 302, headers: [("Location", podURL), ("pod", "71")])
+        let followup = try AuthenticationResponse(cookies: [cookie], body: plist(["failureType": "-5000", "customerMessage": "MZFinance.BadLogin.Configurator_message"]))
+        let transport = try ScriptedTransport([bagResponse(), redirect, followup, redirect, successResponse()])
+        let signer = RecordingSigner()
+        let account = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", environment: environment(transport, signer))
+        let requests = Array(await transport.requests.dropFirst())
+        let inputs = await signer.inputs
+        XCTAssertEqual(requests.count, 4)
+        XCTAssertEqual(inputs.count, 4)
+        XCTAssertEqual(inputs[0], inputs[1])
+        XCTAssertEqual(inputs[2], inputs[3])
+        XCTAssertNotEqual(inputs[1], inputs[2])
+        for index in requests.indices {
+            XCTAssertEqual(requests[index].body, inputs[index])
+            let values = try AuthenticationValidation.plist(inputs[index])
+            XCTAssertEqual(values["attempt"] as? String, index < 2 ? "1" : "2")
+            XCTAssertEqual(requests[index].headers.first { $0.0 == "X-Apple-ActionSignature" }?.1, Data([0, 255, UInt8(index + 1)]).base64EncodedString())
+        }
+        XCTAssertEqual(requests[2].url.absoluteString, podURL)
+        XCTAssertEqual(requests[2].headers.first { $0.0 == "Cookie" }?.1, "session=followup")
+        XCTAssertEqual(account.cookie, [cookie])
+        XCTAssertEqual(account.pod, "71")
+        let closes = await signer.closes
+        XCTAssertEqual(closes, 1)
     }
 
     func testEmpty403IsTerminalAndReleasesResources() async throws {
@@ -170,14 +202,30 @@ final class OfflineAuthenticationTests: XCTestCase {
     }
 
     func testBadCredentialsAreNotAssumedToBeTwoFactorChallenge() async throws {
-        for (failure, code, expected) in [("", "", AuthenticationError.credentialsRejected), ("5005", "123456", .invalidVerificationCode), ("-5000", "", .credentialsRejected)] {
+        for (failure, code, expected) in [("", "", AuthenticationError.credentialsRejected), ("5005", "123456", .invalidVerificationCode), ("-5000", "", .credentialsRejected), ("-5000", "123456", .credentialsRejected)] {
             let response = try AuthenticationResponse(body: plist(["failureType": failure, "customerMessage": "MZFinance.BadLogin.Configurator_message"]))
-            let transport = try ScriptedTransport([bagResponse(), response]); let signer = RecordingSigner()
+            let transport = try ScriptedTransport([bagResponse(), response] + (failure == "-5000" ? [response] : [])); let signer = RecordingSigner()
             do {
                 _ = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", code: code, environment: environment(transport, signer))
                 XCTFail("Expected an authentication failure")
             } catch { XCTAssertEqual(error as? AuthenticationError, expected) }
+            let requests = await transport.requests.count
+            XCTAssertEqual(requests, failure == "-5000" ? 3 : 2, "Credential follow-up is allowed only once")
+            let signerCloses = await signer.closes; let transportCloses = await transport.closes
+            XCTAssertEqual(signerCloses, 1); XCTAssertEqual(transportCloses, 1)
         }
+    }
+
+    func testEmpty403AfterCredentialFollowupIsStillTerminal() async throws {
+        let response = try AuthenticationResponse(body: plist(["failureType": "-5000"]))
+        let transport = try ScriptedTransport([bagResponse(), response, AuthenticationResponse(status: 403)])
+        let signer = RecordingSigner()
+        do {
+            _ = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", environment: environment(transport, signer))
+            XCTFail("Expected a terminal rejection")
+        } catch { XCTAssertEqual(error as? AuthenticationError, .requestRejected(status: 403)) }
+        let requests = await transport.requests.count; let closes = await signer.closes
+        XCTAssertEqual(requests, 3); XCTAssertEqual(closes, 1)
     }
 
     func testTimeoutDoesNotRepeatCredentials() async throws {

@@ -132,3 +132,4 @@ Foundation/ApplePackage/
 
 # Optional Apple resources are prepared in CI and never committed.
 Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets/
+Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets.zip

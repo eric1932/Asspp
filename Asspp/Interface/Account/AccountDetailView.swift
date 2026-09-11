@@ -20,6 +20,9 @@ struct AccountDetailView: View {
     }
 
     @State private var rotatingHint = ""
+    @State private var rotationSucceeded = false
+    @State private var isRotating = false
+    @State private var showsReauthentication = false
 
     var body: some View {
         Form {
@@ -61,9 +64,14 @@ struct AccountDetailView: View {
                     Text("Password Token")
                 }
                 AsyncButton {
+                    isRotating = true
+                    rotatingHint = ""
+                    rotationSucceeded = false
+                    defer { isRotating = false }
                     do {
                         try await vm.rotate(id: account?.id ?? "")
                         rotatingHint = String(localized: "Success")
+                        rotationSucceeded = true
                     } catch {
                         rotatingHint = error.localizedDescription
                         throw error
@@ -72,6 +80,8 @@ struct AccountDetailView: View {
                     Text("Rotate Token")
                 }
                 .disabledWhenLoading()
+                Button("Reauthenticate Account") { showsReauthentication = true }
+                    .disabled(isRotating || account == nil)
             } header: {
                 Text("Password Token")
             } footer: {
@@ -79,8 +89,9 @@ struct AccountDetailView: View {
                     Text("If you fail to acquire a license for a product, rotating the password token may help. This will use the initial password to authenticate with the App Store again.")
                 } else {
                     Text(rotatingHint)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(rotationSucceeded ? Color.green : Color.red)
                 }
+                Text("If rotation fails, reauthenticate with your current password and a verification code if available. You do not need to delete this account.")
             }
             Section {
                 Button("Delete") {
@@ -92,5 +103,20 @@ struct AccountDetailView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Account Details")
+        .sheet(isPresented: $showsReauthentication, onDismiss: { rotatingHint = "" }) {
+            if let account {
+                NavigationStack {
+                    AddAccountView(accountEmail: account.account.email)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") { showsReauthentication = false }
+                            }
+                        }
+                }
+                #if os(macOS)
+                .frame(minWidth: 500, minHeight: 500)
+                #endif
+            }
+        }
     }
 }

@@ -38,7 +38,7 @@ final class NativeSAPMachine: SAPMachine, @unchecked Sendable {
 
     private init(hardware: Data) throws {
         #if ASSPP_BUNDLED_SAP_ASSETS
-        guard let directory = Bundle.module.url(forResource: "SAPAssets", withExtension: nil) else {
+        guard let directory = Bundle.module.url(forResource: "SAPAssets", withExtension: "zip") else {
             throw AuthenticationError.signingFailed("Bundled SAP resources are missing. Reinstall this build.")
         }
         #else

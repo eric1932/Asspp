@@ -31,10 +31,13 @@ Apple SAP assets from the fixed Apple software-update URL in the pinned referenc
 Caches/ApplePackage/SAP/apple-assets-v2 directory.
 
 The bundled variant runs `prepare_assets.py` on the CI runner, verifies the same
-four files, and stages them in the gitignored
-`Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets/` directory.
-SwiftPM copies that directory into its resource bundle. The native bridge reads
-these files in place without writing to the app bundle or downloading replacements.
+four files, and compresses them into the gitignored
+`Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets.zip` data resource.
+SwiftPM copies the archive into its resource bundle. The native bridge decompresses
+it directly into memory without extracting to disk or downloading replacements.
+Raw guest Mach-O files must not be packaged separately: recursive re-signers can
+rewrite their code signatures, breaking the pinned byte counts and hashes. ZIP
+entries are checked for exact names, sizes, duplicates, file types and hashes.
 Missing/corrupt bundled resources fail explicitly. Both variants check the fixed
 file sizes and SHA-256 values on every load. Both still contact Apple for SAP setup
 and authentication. Apple binaries are never committed to Git, but the bundled
@@ -51,12 +54,17 @@ same source branch for each variant. The reusable regression workflow builds the
 native runtime from the checked-out commit and runs the offline tests. Packaging
 then builds a Release iPhone IPA without code signing. Bundled builds additionally
 test actual resource initialization and a signed request with fictional credentials.
+After packaging, `verify_resigning.py` re-signs disposable copies of raw CommerceKit
+and the built app with Apple codesign. It verifies that raw guest bytes change,
+while the app's archive and all four decompressed files remain unchanged. The
+delivered IPA is still unsigned. AllinSign device acceptance remains manual.
 No real account or signing certificate is required in CI.
 
 Each successful run uploads an `Asspp-<mode>-unsigned-<commit>` artifact containing
 the IPA, `BUILD.json`, `SHA256SUMS.txt`, and the Apple resource notice, retained for
 seven days. `sap_assets.py` checks the **final IPA**: exactly one complete, hash-valid
-resource set for bundled mode, no SAP resources for download mode. Re-sign the IPA
+resource archive for bundled mode, no SAP resources for download mode. Raw
+`SAPAssets/` files are rejected in both modes. Re-sign the IPA
 before installing it on a normal iPhone. Do not infer iPhone runtime success from
 a successful build.
 
@@ -120,11 +128,20 @@ The first full Swift live run reached credential validation in about 10 seconds.
 It also disproved the old 2FA heuristic: Apple's fictional-account response has
 an empty `failureType` plus `MZFinance.BadLogin.Configurator_message`. That is now
 reported as `credentialsRejected`. The UI offers an explicit “Enter Verification
-Code” action, while network/signing failures never reveal that field. Incorrect
+Code” action before or after a request; network/signing failures do not
+automatically reveal that field. Incorrect
 verification code responses (`5005`) retain the code field for correction.
 
-These results do not establish real-account login, 2FA, token refresh, downloads,
-or the memory/latency behavior on an iPhone. Perform those checks manually on a
+A user device report confirmed CN account token rotation with the on-demand build,
+but US account rotation with 2FA was rejected without a notification. Account
+Details now offers reauthentication with a freshly entered password and optional
+verification code; the saved account changes only after success. Authentication
+starts at `attempt=1` and permits one `-5000` follow-up with `attempt=2`, following
+the pinned ipatool sequence. Redirects retain their current body and do not consume
+this follow-up. This protocol change is not proof that Apple will send a code.
+
+These results do not establish US 2FA login, downloads, or the memory/latency
+behavior on an iPhone. Perform those checks manually on a
 normal signed iPhone build and macOS build before calling the fix device-verified.
 Do not put real credentials into CI. Do not infer a successful login from HTTP 200
 with fictional credentials.

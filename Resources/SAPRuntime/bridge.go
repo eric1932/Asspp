@@ -114,7 +114,7 @@ func apsap_prepare(handle C.uint64_t, output **C.char) C.int32_t {
 	}
 	var bundle assets.Bundle
 	if s.bundled {
-		bundle, err = assets.LoadBundledDirectory(s.ctx, s.directory)
+		bundle, err = assets.LoadBundledArchive(s.ctx, s.directory)
 	} else {
 		bundle, err = assets.LoadFromDirectory(s.ctx, s.directory)
 	}

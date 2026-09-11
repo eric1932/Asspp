@@ -9,6 +9,7 @@ import ApplePackage
 import SwiftUI
 
 struct AddAccountView: View {
+    private let accountEmail: String?
     @State private var vm = AppStore.this
     @Environment(\.dismiss) private var dismiss
 
@@ -23,11 +24,16 @@ struct AddAccountView: View {
     @State private var progress: AuthenticationProgress?
     @State private var authenticationTask: Task<Void, Never>?
 
+    init(accountEmail: String? = nil) {
+        self.accountEmail = accountEmail
+        _email = State(initialValue: accountEmail ?? "")
+    }
+
     var body: some View {
         Form {
             Section {
                 TextField("Email (Apple ID)", text: $email)
-                    .disabled(authenticationTask != nil)
+                    .disabled(authenticationTask != nil || accountEmail != nil)
                 #if os(iOS)
                     .disableAutocorrection(true)
                     .autocapitalization(.none)
@@ -63,7 +69,11 @@ struct AddAccountView: View {
                     .disabled(password.isEmpty)
                 }
             } footer: {
-                Text("Your account is saved in your Keychain and will be synced across devices with the same iCloud account signed in.")
+                if accountEmail != nil {
+                    Text("Enter your current Apple Account password. Your saved account is updated only after a successful sign-in.")
+                } else {
+                    Text("Your account is saved in your Keychain and will be synced across devices with the same iCloud account signed in.")
+                }
             }
             if codeRequired {
                 Section {
@@ -73,6 +83,7 @@ struct AddAccountView: View {
                         .disableAutocorrection(true)
                         .autocapitalization(.none)
                         .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
                     #endif
                 } header: {
                     Text("2FA Code")
@@ -84,7 +95,7 @@ struct AddAccountView: View {
             Section {
                 Button("Authenticate", action: authenticate)
                     .disabled(email.isEmpty || password.isEmpty || authenticationTask != nil)
-                if !codeRequired, error as? ApplePackage.AuthenticationError == .credentialsRejected {
+                if !codeRequired {
                     Button("Enter Verification Code") { codeRequired = true }
                         .disabled(authenticationTask != nil)
                 }
@@ -110,12 +121,12 @@ struct AddAccountView: View {
         .animation(.spring, value: codeRequired)
         .onDisappear { authenticationTask?.cancel() }
         .onChange(of: email) { codeRequired = false; code = "" }
-        .onChange(of: password) { codeRequired = false; code = "" }
+        .onChange(of: password) { code = "" }
         #if os(iOS)
             .listStyle(.insetGrouped)
             .navigationBarTitleDisplayMode(.inline)
         #endif
-            .navigationTitle("Add Account")
+            .navigationTitle(accountEmail == nil ? Text("Add Account") : Text("Reauthenticate Account"))
     }
 
     private func authenticate() {

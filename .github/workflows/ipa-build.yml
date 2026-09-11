@@ -53,11 +53,16 @@ jobs:
         run: swift test --filter 'BundledSAPTests|LiveSAPTests'
       - name: Confirm on-demand build has no bundled Apple resources
         if: ${{ !inputs.bundle_sap_assets }}
-        run: test ! -e Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets
+        run: |
+          test ! -e Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets
+          test ! -e Packages/ApplePackage/Sources/ApplePackage/Resources/SAPAssets.zip
       - name: Compile and package unsigned Release IPA
         run: |
           mkdir -p "$RUNNER_TEMP/ipa-output"
           zsh Resources/Scripts/compile.release.mobile.ci.sh "$PWD" "$RUNNER_TEMP/ipa-output/Asspp-$SAP_MODE.ipa"
+      - name: Verify SAP resources survive re-signing a copy of the app
+        if: inputs.bundle_sap_assets
+        run: python3 Resources/SAPRuntime/verify_resigning.py "$RUNNER_TEMP/ipa-output/Asspp-$SAP_MODE.ipa" "$RUNNER_TEMP/asspp-ipa-assets/SAPAssets"
       - name: Verify the IPA contents and record provenance
         run: |
           python3 Resources/SAPRuntime/sap_assets.py ipa "$RUNNER_TEMP/ipa-output/Asspp-$SAP_MODE.ipa" "$SAP_MODE"
@@ -77,6 +82,7 @@ jobs:
           (output / 'BUILD.json').write_text(json.dumps({
               'commit': os.environ['GITHUB_SHA'], 'mode': os.environ['SAP_MODE'],
               'signed': False, 'ipa_bytes': ipa.stat().st_size,
+              'sap_resource_format': 'zip' if os.environ['SAP_MODE'] == 'bundled' else 'download-cache',
               'run': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
               'apple_source': APPLE_UPDATE_URL,
               'bundled_assets': FILES if os.environ['SAP_MODE'] == 'bundled' else {},

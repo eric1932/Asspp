@@ -45,18 +45,25 @@ public enum Authenticator {
     }
 
     private static func login(email: String, password: String, code: String, cookies: [Cookie], endpoint: URL, signer: any ActionSigner, environment: AuthenticationEnvironment) async throws -> Account {
-        // Serialize once. The signer and every redirect receive precisely these bytes.
-        let body = try PropertyListSerialization.data(fromPropertyList: [
-            "appleId": email, "password": password + code, "guid": environment.deviceIdentifier,
-            "attempt": code.isEmpty ? "4" : "2", "rmp": "0", "why": "signIn",
-        ], format: .xml, options: 0)
+        // Match the pinned ipatool login sequence: start at 1, then allow one
+        // follow-up for failureType -5000. That response is not proof of 2FA.
+        // Serialize once per attempt; redirects keep exactly the same bytes.
+        func requestBody(attempt: Int) throws -> Data {
+            try PropertyListSerialization.data(fromPropertyList: [
+                "appleId": email, "password": password + code.filter { !$0.isWhitespace }, "guid": environment.deviceIdentifier,
+                "attempt": String(attempt), "rmp": "0", "why": "signIn",
+            ], format: .xml, options: 0)
+        }
+        var attempt = 1
+        var redirects = 0
+        var body = try requestBody(attempt: attempt)
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: true)!
         components.queryItems = (components.queryItems ?? []).filter { $0.name != "guid" } + [URLQueryItem(name: "guid", value: environment.deviceIdentifier)]
         guard var url = components.url else { throw AuthenticationError.invalidEndpoint }
         var cookies = cookies
         var storeFront = ""
         var pod: String?
-        for redirect in 0 ... 3 {
+        while true {
             try Task.checkCancellation()
             try AuthenticationValidation.authenticationEndpoint(url)
             environment.progress(.signing)
@@ -77,25 +84,30 @@ public enum Authenticator {
             if let value = response.header("x-set-apple-store-front")?.components(separatedBy: "-").first, !value.isEmpty { storeFront = value }
             if let value = response.header("pod"), !value.isEmpty { pod = value }
             if [301, 302, 303, 307, 308].contains(response.status) {
-                guard redirect < 3 else { throw AuthenticationError.tooManyRedirects }
+                guard redirects < 3 else { throw AuthenticationError.tooManyRedirects }
                 guard let location = response.header("location"), let next = URL(string: location, relativeTo: url)?.absoluteURL else { throw AuthenticationError.invalidEndpoint }
                 try AuthenticationValidation.authenticationEndpoint(next)
                 url = next
+                redirects += 1
                 continue
             }
             // In particular, an empty 403 is terminal; retrying the same credentials cannot fix SAP.
             guard response.status == 200 else { throw AuthenticationError.requestRejected(status: response.status) }
-            return try account(from: response.body, email: email, password: password, cookies: cookies, storeFront: storeFront, pod: pod)
+            let dictionary = try AuthenticationValidation.plist(response.body)
+            if attempt == 1, dictionary["failureType"] as? String == "-5000" {
+                attempt = 2
+                body = try requestBody(attempt: attempt)
+                continue
+            }
+            return try account(from: dictionary, email: email, password: password, cookies: cookies, storeFront: storeFront, pod: pod)
         }
-        throw AuthenticationError.tooManyRedirects
     }
 
     private static func cookieDomain(_ cookie: Cookie) -> String? {
         cookie.domain?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
     }
 
-    private static func account(from data: Data, email: String, password: String, cookies: [Cookie], storeFront: String, pod: String?) throws -> Account {
-        let dictionary = try AuthenticationValidation.plist(data)
+    private static func account(from dictionary: [String: Any], email: String, password: String, cookies: [Cookie], storeFront: String, pod: String?) throws -> Account {
         if dictionary["failureType"] as? String == "5005" { throw AuthenticationError.invalidVerificationCode }
         // Verified with fictional credentials: even an empty failureType plus this
         // message is NOT proof of a 2FA challenge. Let the user opt into entering a

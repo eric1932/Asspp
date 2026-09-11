@@ -29,8 +29,9 @@ The generated `Artifacts/ApplePackageSAP.xcframework` is optional for offline
 mock tests and mandatory for Asspp builds. Native builds and opt-in live tests are
 documented in `Resources/SAPRuntime/README.md` at the repository root.
 
-Optional `Sources/ApplePackage/Resources/SAPAssets` files are staged by CI only.
-Their presence selects the bundled-resource build and adds the SwiftPM resource
-copy rule. Absence selects the original download/cache path. Bundled builds never
+Optional `Sources/ApplePackage/Resources/SAPAssets.zip` is staged by CI only.
+Its presence selects the bundled-resource build and adds the SwiftPM resource
+copy rule. The archive is decompressed into memory, protecting the guest binaries
+from recursive app re-signing. Absence selects the original download/cache path. Bundled builds never
 download replacements for missing or corrupt embedded files. `BundledSAPTests`
 checks real resource initialization only when explicitly enabled in CI.
