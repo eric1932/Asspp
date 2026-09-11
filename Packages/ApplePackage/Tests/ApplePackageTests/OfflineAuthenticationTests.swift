@@ -165,11 +165,12 @@ final class OfflineAuthenticationTests: XCTestCase {
         let podURL = "https://p71-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate"
         let cookie = Cookie(name: "session", value: "followup", path: "/", domain: ".itunes.apple.com", httpOnly: true, secure: true)
         let redirect = AuthenticationResponse(status: 302, headers: [("Location", podURL), ("pod", "71")])
-        let followup = try AuthenticationResponse(cookies: [cookie], body: plist(["failureType": "-5000", "customerMessage": "MZFinance.BadLogin.Configurator_message"]))
+        let followup = try AuthenticationResponse(body: plist(["failureType": "-5000", "customerMessage": "MZFinance.BadLogin.Configurator_message"]), cookies: [cookie])
         let transport = try ScriptedTransport([bagResponse(), redirect, followup, redirect, successResponse()])
         let signer = RecordingSigner()
         let account = try await Authenticator.authenticate(email: "test@example.invalid", password: "secret", environment: environment(transport, signer))
-        let requests = Array(await transport.requests.dropFirst())
+        let allRequests = await transport.requests
+        let requests = Array(allRequests.dropFirst())
         let inputs = await signer.inputs
         XCTAssertEqual(requests.count, 4)
         XCTAssertEqual(inputs.count, 4)
