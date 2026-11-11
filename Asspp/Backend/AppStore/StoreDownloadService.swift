@@ -61,11 +61,7 @@ enum StoreDownloadService {
         do {
             let region = Configuration.countryCode(for: account.store)
             var effectiveVersion = version
-            let response = try await StoreDownloadProtocol.fetchWithFallback(version: version) { endpoint, requestedVersion in
-                effectiveVersion = requestedVersion
-                return try await fetch(session: session, endpoint: endpoint, account: &account,
-                                       appID: app.id, version: requestedVersion, trace: trace)
-            } resolveVersion: {
+            let resolveVersion: () async throws -> String = {
                 // An unpinned redownload can return a tvOS build for an iOS app.
                 guard let region else { throw StoreDownloadError.catalogUnavailable }
                 let metadata: StoreDownloadProtocol.CatalogVersion
@@ -80,8 +76,44 @@ enum StoreDownloadService {
                 else { throw StoreDownloadError.catalogUnavailable }
                 logger.info("Store download [\(trace)]: catalog version=\(metadata.externalVersionID)")
                 return metadata.externalVersionID
-            } onFallback: { reason in
-                logger.info("Store download [\(trace)]: trying \(reason == "empty-redownload-http500" ? "update" : "redownload"), reason=\(reason)")
+            }
+            // With device attestation, prefer ent/download like ipatool 2.8.0: since Apple's
+            // attestation change, volumeStore answers attested requests without sinfs.
+            var entitled: [String: Any]?
+            if let provider = ApplePackage.Configuration.deviceAttestationProvider {
+                do {
+                    let requested: String
+                    if let version {
+                        requested = version
+                    } else {
+                        requested = try await resolveVersion()
+                    }
+                    let candidate = try await entDownload(session: session, provider: provider, account: &account,
+                                                          appID: app.id, version: requested, trace: trace)
+                    if StoreDownloadProtocol.failureCode(candidate).isEmpty,
+                       let items = candidate["songList"] as? [Any], !items.isEmpty
+                    {
+                        entitled = candidate
+                        effectiveVersion = requested
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    logger.info("Store download [\(trace)]: ent/download not used, \(StoreDiagnostics.errorSummary(error))")
+                }
+            }
+            let response: [String: Any]
+            if let entitled {
+                response = entitled
+            } else {
+                response = try await StoreDownloadProtocol.fetchWithFallback(version: version) { endpoint, requestedVersion in
+                    effectiveVersion = requestedVersion
+                    return try await fetch(session: session, endpoint: endpoint, account: &account,
+                                           appID: app.id, version: requestedVersion, trace: trace)
+                } resolveVersion: {
+                    try await resolveVersion()
+                } onFallback: { reason in
+                    logger.info("Store download [\(trace)]: trying \(reason == "empty-redownload-http500" ? "update" : "redownload"), reason=\(reason)")
+                }
             }
             // Preserve the existing UI's explicit free-license acquisition flow.
             if StoreDownloadProtocol.failureCode(response) == "9610" {
@@ -197,6 +229,59 @@ enum StoreDownloadService {
             return plist
         }
         throw StoreDownloadError.invalidRedirect
+    }
+
+    /// ipatool 2.8.0's attested entitlement download: kbsync from the attestation provider,
+    /// a serial derived from the device GUID, Store AMD proof, and the account token.
+    private static func entDownload(session: URLSession, provider: any DeviceAttestationProviding, account: inout Account,
+                                    appID: Int64, version: String, trace: String) async throws -> [String: Any]
+    {
+        let guid = Configuration.deviceIdentifier
+        guard let dsid = UInt64(account.directoryServicesIdentifier), dsid != 0,
+              let hardwareID = StoreDownloadProtocol.hardwareID(guid)
+        else { throw DeviceAttestationError.failed("ent/download needs a numeric DSID and a 12-hex device GUID") }
+        let kbsync = try await provider.keybagSync(deviceIdentifier: guid, dsid: dsid)
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "downloaddispatch.itunes.apple.com"
+        components.path = StoreDownloadProtocol.entDownloadPath
+        components.queryItems = [URLQueryItem(name: "guid", value: guid)]
+        guard let url = components.url else { throw StoreDownloadError.invalidRedirect }
+        let payload = StoreDownloadProtocol.entPayload(appID: appID, guid: guid, kbsync: kbsync, hardwareID: hardwareID, version: version)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try PropertyListSerialization.data(fromPropertyList: payload, format: .xml, options: 0)
+        // ipatool sends this content type with the XML plist body.
+        request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.setValue(Configuration.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(account.directoryServicesIdentifier, forHTTPHeaderField: "iCloud-DSID")
+        request.setValue(account.directoryServicesIdentifier, forHTTPHeaderField: "X-Dsid")
+        if !account.passwordToken.isEmpty {
+            request.setValue(account.passwordToken, forHTTPHeaderField: "X-Token")
+        }
+        if !account.store.isEmpty {
+            request.setValue("\(account.store)-1", forHTTPHeaderField: "X-Apple-Store-Front")
+        }
+        for (name, value) in account.cookie.buildCookieHeader(url) {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        let proof = try await DeviceAttestation.storeHeaders(for: url)
+        for (name, value) in proof {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        logger.info("Store download [\(trace)]: endpoint=ent hop=0 sessionCookie=\(request.value(forHTTPHeaderField: "Cookie") != nil) proof=\(!proof.isEmpty) kbsync=\(kbsync.count)")
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else { throw StoreDownloadError.response(0) }
+        mergeCookies(response: response, url: url, account: &account)
+        logger.info("Store download [\(trace)]: endpoint=ent HTTP=\(response.statusCode) bytes=\(data.count)")
+        let plist = StoreProtocol.plist(data)
+        if let plist {
+            logger.info("Store download [\(trace)]: ent \(StoreDownloadProtocol.summary(plist))")
+        }
+        guard response.statusCode == 200, let plist else {
+            throw data.isEmpty ? StoreDownloadError.emptyResponse(response.statusCode) : StoreDownloadError.response(response.statusCode)
+        }
+        return plist
     }
 
     private static func mergeCookies(response: HTTPURLResponse, url: URL, account: inout Account) {

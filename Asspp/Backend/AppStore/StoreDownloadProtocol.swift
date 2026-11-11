@@ -103,6 +103,38 @@ enum StoreDownloadProtocol {
         return url
     }
 
+    static let entDownloadPath = "/WebObjects/DownloadDispatch.woa/wa/ent/download"
+
+    /// The six bytes of a 12-hex-digit device GUID.
+    static func hardwareID(_ guid: String) -> [UInt8]? {
+        let digits = Array(guid.utf8)
+        guard digits.count == 12 else { return nil }
+        var bytes: [UInt8] = []
+        var index = 0
+        while index < digits.count {
+            guard let byte = UInt8(String(decoding: digits[index ..< index + 2], as: UTF8.self), radix: 16) else { return nil }
+            bytes.append(byte)
+            index += 2
+        }
+        return bytes
+    }
+
+    /// ent/download body as ipatool 2.8.0 builds it: string adam ID, base64 kbsync, and a
+    /// serial number of a fixed prefix followed by the last four GUID bytes.
+    static func entPayload(appID: Int64, guid: String, kbsync: Data, hardwareID: [UInt8], version: String) -> [String: Any] {
+        var serialBytes: [UInt8] = [0x54, 0xC8, 0xB0, 0xA9, 0x88]
+        serialBytes.append(contentsOf: hardwareID.dropFirst(2))
+        let serial = Data(serialBytes)
+        var result: [String: Any] = [
+            "creditDisplay": "", "guid": guid, "kbsync": kbsync.base64EncodedString(),
+            "salableAdamId": String(appID), "serialNumber": serial.base64EncodedString(),
+        ]
+        if !version.isEmpty {
+            result["externalVersionId"] = version
+        }
+        return result
+    }
+
     static func payload(endpoint: Endpoint, appID: Int64, guid: String, version: String?) -> [String: Any] {
         var result: [String: Any] = ["creditDisplay": "", "guid": guid, "salableAdamId": appID, "serialNumber": "0"]
         if let version, !version.isEmpty {
