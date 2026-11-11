@@ -153,7 +153,12 @@ enum StoreDownloadService {
             for (name, value) in account.cookie.buildCookieHeader(url) {
                 request.setValue(value, forHTTPHeaderField: name)
             }
-            logger.info("Store download [\(trace)]: endpoint=\(endpoint.rawValue) hop=\(redirect) sessionCookie=\(request.value(forHTTPHeaderField: "Cookie") != nil)")
+            // Store AMD proof for this exact URL when device attestation is configured.
+            let proof = try await DeviceAttestation.storeHeaders(for: url)
+            for (name, value) in proof {
+                request.setValue(value, forHTTPHeaderField: name)
+            }
+            logger.info("Store download [\(trace)]: endpoint=\(endpoint.rawValue) hop=\(redirect) sessionCookie=\(request.value(forHTTPHeaderField: "Cookie") != nil) proof=\(!proof.isEmpty)")
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw StoreDownloadError.response(0) }
             mergeCookies(response: response, url: url, account: &account)

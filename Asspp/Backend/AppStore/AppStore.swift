@@ -95,6 +95,13 @@ class AppStore {
             }
         }
         ApplePackage.Configuration.deviceIdentifier = deviceIdentifier
+        if let provider = RemoteAttestationProvider.fromUserDefaults() {
+            ApplePackage.Configuration.deviceAttestationProvider = provider
+            ApplePackage.Configuration.userAgent = DeviceAttestation.userAgent
+            logger.info("device attestation: using service at \(provider.baseURL.absoluteString)")
+        } else {
+            logger.info("device attestation: not configured")
+        }
     }
 
     @discardableResult
