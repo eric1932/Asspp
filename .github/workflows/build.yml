@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      osx_runner:
+        description: "Runner label for build-osx (macos-15-intel when arm64 capacity is short)"
+        required: false
+        default: macos-26
 
 jobs:
   build-ios:
@@ -66,7 +71,7 @@ jobs:
           path: Asspp.ipa
 
   build-osx:
-    runs-on: macos-26
+    runs-on: ${{ inputs.osx_runner || 'macos-26' }}
 
     steps:
       - name: Checkout
