@@ -90,7 +90,8 @@ enum StoreDownloadService {
             do {
                 let item = try StoreDownloadProtocol.packageItem(response, bundleID: app.bundleID, version: effectiveVersion)
                 let result = try parse(item)
-                logger.info("Store download [\(trace)]: product metadata ready")
+                let shape = StoreDownloadProtocol.shape(response, bundleID: app.bundleID, version: effectiveVersion)
+                logger.info("Store download [\(trace)]: product metadata ready, \(shape)")
                 return result
             } catch StoreDownloadError.invalidPackage {
                 let shape = StoreDownloadProtocol.shape(response, bundleID: app.bundleID, version: effectiveVersion)
@@ -156,6 +157,13 @@ enum StoreDownloadService {
             request.setValue(Locale.preferredLanguages.prefix(3).joined(separator: ", "), forHTTPHeaderField: "Accept-Language")
             request.setValue(account.directoryServicesIdentifier, forHTTPHeaderField: "iCloud-DSID")
             request.setValue(account.directoryServicesIdentifier, forHTTPHeaderField: "X-Dsid")
+            // ipatool 2.8.0 and ApplePackage's purchase request send these with Store commerce calls.
+            if !account.passwordToken.isEmpty {
+                request.setValue(account.passwordToken, forHTTPHeaderField: "X-Token")
+            }
+            if !account.store.isEmpty {
+                request.setValue("\(account.store)-1", forHTTPHeaderField: "X-Apple-Store-Front")
+            }
             for (name, value) in account.cookie.buildCookieHeader(url) {
                 request.setValue(value, forHTTPHeaderField: name)
             }
