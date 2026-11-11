@@ -3,6 +3,7 @@ name: Build App
 on:
   push:
     branches: [main, "debug/**"]
+    paths-ignore: ["Tools/attestd/**", ".github/workflows/attestd.yml"]
   pull_request:
     branches: [main]
   workflow_dispatch:
