@@ -44,22 +44,42 @@ class FileStorage: PersistProvider {
     }
 }
 
+/// Prefers the iCloud-synchronized keychain. Unsigned builds (CI artifacts, re-signed
+/// sideloads without keychain-access-groups) cannot use it, so fall back to the local,
+/// non-synchronizable keychain instead of failing to persist accounts at all.
 class KeychainStorage: PersistProvider {
     private let keychain: Keychain
+    private let localKeychain: Keychain
 
     init(service: String) {
         keychain = Keychain(service: service).synchronizable(true)
+        localKeychain = Keychain(service: service)
     }
 
     func data(forKey key: String) throws -> Data? {
-        try keychain.getData(key)
+        do {
+            if let data = try keychain.getData(key) { return data }
+        } catch {
+            logger.info("keychain: synchronized read failed (\((error as NSError).code)) for \(key); trying local keychain")
+        }
+        return try localKeychain.getData(key, ignoringAttributeSynchronizable: false)
     }
 
     func set(_ data: Data?, forKey key: String) throws {
+        do {
+            if let data {
+                try keychain.set(data, key: key)
+            } else {
+                try keychain.remove(key)
+            }
+            return
+        } catch {
+            logger.info("keychain: synchronized write failed (\((error as NSError).code)) for \(key); using local keychain")
+        }
         if let data {
-            try keychain.set(data, key: key)
+            try localKeychain.set(data, key: key, ignoringAttributeSynchronizable: false)
         } else {
-            try keychain.remove(key)
+            try localKeychain.remove(key, ignoringAttributeSynchronizable: false)
         }
     }
 }
