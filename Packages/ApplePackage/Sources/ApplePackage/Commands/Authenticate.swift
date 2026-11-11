@@ -48,19 +48,33 @@ public actor Authenticator {
         defer { _ = client.shutdown() }
         var retried = false
         var redirects = 0
-        for _ in 0 ..< 5 {
+        var edgeRejections = 0
+        for _ in 0 ..< 12 {
+            // Apple's edge passes the bare legacy path to the store backend far more often than
+            // the trailing-slash form, so use the slash form only on every third edge attempt.
+            let slash = edgeRejections % 3 == 2
+            let target = Bag.legacyAuthEndpoint(endpoint, trailingSlash: slash)
             let request = try await Self.makeRequest(
-                endpoint: endpoint, email: email, password: password, code: code, cookies: cookies, deviceIdentifier: deviceIdentifier,
+                endpoint: target, email: email, password: password, code: code, cookies: cookies, deviceIdentifier: deviceIdentifier,
                 sapSigner: signer,
             )
             let accumulator = ResponseAccumulator(request: request, maxBodySize: 2 * 1024 * 1024)
             let response = try await client.execute(request: request, delegate: accumulator).futureResult.get()
             // DEBUG BUILD: trace every authentication round trip without credentials.
             APLogger.info(
-                "auth: POST \(APLogger.safeURL(endpoint.absoluteString)) [\(code.isEmpty ? "password" : "password+code")] -> HTTP \(response.status.code), \(response.body?.readableBytes ?? 0) bytes",
+                "auth: POST \(APLogger.safeURL(target.absoluteString)) slash=\(slash) [\(code.isEmpty ? "password" : "password+code")] -> HTTP \(response.status.code), \(response.body?.readableBytes ?? 0) bytes, backend=\(response.headers.contains(name: "x-apple-jingle-correlation-key"))",
             )
             if response.status != .ok, let body = response.body, body.readableBytes > 0 {
                 APLogger.info("auth: non-200 body: \(String(decoding: body.readableBytesView.prefix(300), as: UTF8.self))")
+            }
+            if Self.isEdgeRejection(response) {
+                edgeRejections += 1
+                guard edgeRejections < Self.maxEdgeRejections else {
+                    try ensureFailed("\(Strings.authFailed): Apple's edge rejected the request \(edgeRejections) times (last HTTP \(response.status.code))")
+                }
+                APLogger.info("auth: edge rejection (HTTP \(response.status.code), no store backend headers), retry \(edgeRejections)")
+                try await Task.sleep(nanoseconds: UInt64(edgeRejections) * 250_000_000)
+                continue
             }
             let result = try parseResponse(response, email: email, password: password, code: code)
             switch result {
@@ -70,15 +84,8 @@ public actor Authenticator {
                 guard let resolved = URL(string: url.relativeString, relativeTo: endpoint)?.absoluteURL else {
                     try ensureFailed(Strings.failedToRetrieveRedirect)
                 }
-                // Apple redirects to p<pod>-buy hosts without the trailing slash the
-                // legacy authenticate route needs; the bare path can answer a correctly
-                // signed request with an empty or HTML error. Normalize like the bag URL.
                 let normalized = Bag.normalizedAuthEndpoint(from: resolved.absoluteString) ?? resolved
-                if normalized != resolved {
-                    APLogger.info(
-                        "auth: redirect \(APLogger.safeURL(resolved.absoluteString)) normalized to \(APLogger.safeURL(normalized.absoluteString))",
-                    )
-                }
+                APLogger.info("auth: redirect \(response.status.code) to \(APLogger.safeURL(normalized.absoluteString))")
                 endpoint = try Self.approvedEndpoint(normalized)
                 redirects += 1
             case .codeRequired: throw AuthenticationError.verificationCodeRequired
@@ -88,7 +95,19 @@ public actor Authenticator {
             case let .failure(message): try ensureFailed("\(Strings.authFailed): \(message)")
             }
         }
-        try ensureFailed("Authentication redirect limit exceeded.")
+        try ensureFailed("Authentication attempt limit exceeded.")
+    }
+
+    static let maxEdgeRejections = 6
+
+    /// Apple's edge answers some authentication requests itself (empty 204, HTML 301 without
+    /// Location, 404, 503) without reaching the store backend, which always tags its responses
+    /// with a Jingle correlation key. Those are routing failures, not authentication results.
+    static func isEdgeRejection(_ response: HTTPClient.Response) -> Bool {
+        guard response.status != .ok, !response.headers.contains(name: "x-apple-jingle-correlation-key") else { return false }
+        let redirectStatuses: [HTTPResponseStatus] = [.movedPermanently, .found, .seeOther, .temporaryRedirect, .permanentRedirect]
+        if redirectStatuses.contains(response.status), response.headers.first(name: "location") != nil { return false }
+        return true
     }
 
     public static func rotatePasswordToken(for account: inout Account) async throws {

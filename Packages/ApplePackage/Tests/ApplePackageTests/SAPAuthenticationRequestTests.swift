@@ -122,14 +122,20 @@ final class SAPAuthenticationRequestTests: XCTestCase {
         XCTAssertEqual(APLogger.safeURL("https://user:pass@apple.com/auth?guid=private#fragment"), "https://apple.com/auth")
     }
 
-    func testLegacyAuthenticationEndpointRequiresTrailingSlash() throws {
+    func testLegacyAuthenticationEndpointKeepsBarePathAndOffersSlashVariant() throws {
         let path = "/WebObjects/MZFinance.woa/wa/authenticate"
         for host in ["buy.itunes.apple.com", "p25-buy.itunes.apple.com", "p123-buy.itunes.apple.com"] {
-            let original = "https://\(host)\(path)?guid=A%2FB&value=1"
-            let normalized = try XCTUnwrap(Bag.normalizedAuthEndpoint(from: original))
-            XCTAssertEqual(normalized.absoluteString, "https://\(host)\(path)/?guid=A%2FB&value=1")
-            XCTAssertEqual(Bag.normalizedAuthEndpoint(from: normalized.absoluteString), normalized)
+            let bare = "https://\(host)\(path)?guid=A%2FB&value=1"
+            let slashed = "https://\(host)\(path)/?guid=A%2FB&value=1"
+            for original in [bare, slashed, "https://\(host)\(path)//?guid=A%2FB&value=1"] {
+                XCTAssertEqual(Bag.normalizedAuthEndpoint(from: original)?.absoluteString, bare)
+            }
+            let normalized = try XCTUnwrap(Bag.normalizedAuthEndpoint(from: bare))
+            XCTAssertEqual(Bag.legacyAuthEndpoint(normalized, trailingSlash: true).absoluteString, slashed)
+            XCTAssertEqual(Bag.legacyAuthEndpoint(normalized, trailingSlash: false).absoluteString, bare)
         }
+        let other = try XCTUnwrap(URL(string: "https://example.invalid\(path)?guid=1"))
+        XCTAssertEqual(Bag.legacyAuthEndpoint(other, trailingSlash: true), other)
         for original in [
             "http://buy.itunes.apple.com\(path)", "https://example.invalid\(path)", "https://evilbuy.itunes.apple.com\(path)",
             "https://pfoo-buy.itunes.apple.com\(path)", "https://p25-buy.itunes.apple.com.example.invalid\(path)",

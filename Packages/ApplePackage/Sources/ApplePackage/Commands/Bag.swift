@@ -107,10 +107,21 @@ public enum Bag {
         return url
     }
 
+    static let legacyAuthenticatePath = "/WebObjects/MZFinance.woa/wa/authenticate"
+
+    static func isLegacyAuthHost(_ host: String) -> Bool {
+        host == "buy.itunes.apple.com" || host.range(of: "^p[0-9]+-buy[.]itunes[.]apple[.]com$", options: .regularExpression) != nil
+    }
+
     /// The bag advertises the native auth endpoint without the `/fast/` sub-path
     /// that the login flow requires; the no-trailing-slash variant 301s to an
-    /// HTML page. The legacy authenticate route also requires its trailing
-    /// slash; the bare route can return a bodyless 301 without Location.
+    /// HTML page.
+    ///
+    /// The legacy authenticate route is kept in its bare form, as the bag and
+    /// Apple's redirects spell it. Measured on 2026-11-10, Apple's edge passed
+    /// the bare path to the store backend for most requests but the
+    /// trailing-slash form almost never (204/301/404/503 from the edge itself).
+    /// `Authenticator` still tries the slash form on some edge retries.
     static func normalizedAuthEndpoint(from urlString: String) -> URL? {
         guard var comps = URLComponents(string: urlString) else { return nil }
         if comps.host == "auth.itunes.apple.com" {
@@ -122,14 +133,30 @@ public enum Bag {
                 path += "/fast"
             }
             comps.path = path + "/"
-        } else if comps.scheme?.lowercased() == "https", let host = comps.host?.lowercased() {
-            let legacyHost =
-                host == "buy.itunes.apple.com" || host.range(of: "^p[0-9]+-buy[.]itunes[.]apple[.]com$", options: .regularExpression) != nil
-            if legacyHost, comps.path == "/WebObjects/MZFinance.woa/wa/authenticate" {
-                comps.path += "/"
+        } else if comps.scheme?.lowercased() == "https", let host = comps.host?.lowercased(), isLegacyAuthHost(host) {
+            var path = comps.path
+            while path.hasSuffix("/") {
+                path.removeLast()
+            }
+            if path == legacyAuthenticatePath {
+                comps.path = path
             }
         }
         return comps.url
+    }
+
+    /// The legacy authenticate URL with or without its trailing slash; any other URL is returned unchanged.
+    static func legacyAuthEndpoint(_ url: URL, trailingSlash: Bool) -> URL {
+        guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: true), comps.scheme?.lowercased() == "https",
+              let host = comps.host?.lowercased(), isLegacyAuthHost(host)
+        else { return url }
+        var path = comps.path
+        while path.hasSuffix("/") {
+            path.removeLast()
+        }
+        guard path == legacyAuthenticatePath else { return url }
+        comps.path = trailingSlash ? path + "/" : path
+        return comps.url ?? url
     }
 
     /// The bag XML response wraps the plist inside `<Document><Protocol><plist>...</plist>`.
