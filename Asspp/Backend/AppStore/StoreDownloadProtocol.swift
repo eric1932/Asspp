@@ -163,6 +163,61 @@ enum StoreDownloadProtocol {
         }
     }
 
+    /// Field names, value kinds and match flags of the returned package items, for
+    /// diagnosing `invalidPackage`. No values: metadata carries the Apple ID.
+    static func shape(_ response: [String: Any], bundleID: String, version: String?) -> String {
+        guard let items = response["songList"] as? [[String: Any]] else {
+            return "songList=\(valueKind(response["songList"]))"
+        }
+        var described: [String] = []
+        for (index, item) in items.enumerated() {
+            var parts: [String] = ["item\(index) keys=\(item.keys.sorted().joined(separator: ","))"]
+            if let text = item["URL"] as? String, let url = URL(string: text) {
+                parts.append("URL=\(url.scheme ?? "nil")://\(url.host ?? "nil")")
+            } else {
+                parts.append("URL=\(valueKind(item["URL"]))")
+            }
+            parts.append("metadata=\(valueKind(item["metadata"]))")
+            if let metadata = item["metadata"] as? [String: Any] {
+                for key in ["bundleShortVersionString", "bundleVersion", "softwareVersionBundleId", "softwareVersionExternalIdentifier"] {
+                    parts.append("\(key)=\(valueKind(metadata[key]))")
+                }
+                let returnedBundle = metadata["softwareVersionBundleId"] as? String
+                parts.append("bundleMatch=\(returnedBundle == bundleID)")
+                if let version {
+                    let returnedVersion = StoreProtocol.string(metadata["softwareVersionExternalIdentifier"])
+                    parts.append("versionMatch=\(returnedVersion == version)")
+                }
+            }
+            if let sinfs = item["sinfs"] as? [[String: Any]] {
+                var entries: [String] = []
+                for sinf in sinfs {
+                    var fields: [String] = []
+                    for key in sinf.keys.sorted() {
+                        fields.append("\(key):\(valueKind(sinf[key]))")
+                    }
+                    let idIsInt64 = (sinf["id"] as? Int64) != nil
+                    entries.append("{\(fields.joined(separator: " ")) idInt64=\(idIsInt64)}")
+                }
+                parts.append("sinfs=\(entries.joined(separator: ","))")
+            } else {
+                parts.append("sinfs=\(valueKind(item["sinfs"]))")
+            }
+            described.append(parts.joined(separator: " "))
+        }
+        return described.joined(separator: " | ")
+    }
+
+    private static func valueKind(_ value: Any?) -> String {
+        guard let value else { return "missing" }
+        if let text = value as? String { return "string(\(text.count))" }
+        if let data = value as? Data { return "data(\(data.count))" }
+        if let list = value as? [Any] { return "array(\(list.count))" }
+        if let dictionary = value as? [String: Any] { return "dict(\(dictionary.count))" }
+        if value is NSNumber { return "number" }
+        return "other"
+    }
+
     /// Only structural fields and numeric codes are logged. Apple messages can
     /// contain account information; display those to the user, never dump them.
     static func summary(_ response: [String: Any]) -> String {

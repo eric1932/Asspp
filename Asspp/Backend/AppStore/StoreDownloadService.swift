@@ -87,10 +87,16 @@ enum StoreDownloadService {
             if StoreDownloadProtocol.failureCode(response) == "9610" {
                 throw ApplePackageError.licenseRequired
             }
-            let item = try StoreDownloadProtocol.packageItem(response, bundleID: app.bundleID, version: effectiveVersion)
-            let result = try parse(item)
-            logger.info("Store download [\(trace)]: product metadata ready")
-            return result
+            do {
+                let item = try StoreDownloadProtocol.packageItem(response, bundleID: app.bundleID, version: effectiveVersion)
+                let result = try parse(item)
+                logger.info("Store download [\(trace)]: product metadata ready")
+                return result
+            } catch StoreDownloadError.invalidPackage {
+                let shape = StoreDownloadProtocol.shape(response, bundleID: app.bundleID, version: effectiveVersion)
+                logger.error("Store download [\(trace)]: invalid package, \(shape)")
+                throw StoreDownloadError.invalidPackage
+            }
         } catch {
             // localizedDescription and NSError.userInfo can contain Apple messages
             // or a credential-bearing URL. Log only the error type and numeric code.
