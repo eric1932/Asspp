@@ -20,8 +20,10 @@ let logger = {
     return logger
 }()
 
-APLogger.verbose = false
+// DEBUG BUILD: log every ApplePackage request and response (credentials and headers stay redacted).
+APLogger.verbose = true
 APLogger.logger = Logger(label: "wiki.qaq.asspp.applepackage")
+logger.info("DEBUG BUILD debug/auth-redirect-slash: redirect normalization + verbose authentication logging")
 
 let version = [
     Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,

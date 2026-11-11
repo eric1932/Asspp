@@ -55,6 +55,13 @@ public actor Authenticator {
             )
             let accumulator = ResponseAccumulator(request: request, maxBodySize: 2 * 1024 * 1024)
             let response = try await client.execute(request: request, delegate: accumulator).futureResult.get()
+            // DEBUG BUILD: trace every authentication round trip without credentials.
+            APLogger.info(
+                "auth: POST \(APLogger.safeURL(endpoint.absoluteString)) [\(code.isEmpty ? "password" : "password+code")] -> HTTP \(response.status.code), \(response.body?.readableBytes ?? 0) bytes",
+            )
+            if response.status != .ok, let body = response.body, body.readableBytes > 0 {
+                APLogger.info("auth: non-200 body: \(String(decoding: body.readableBytesView.prefix(300), as: UTF8.self))")
+            }
             let result = try parseResponse(response, email: email, password: password, code: code)
             switch result {
             case let .success(account): return account

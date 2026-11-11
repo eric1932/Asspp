@@ -2,12 +2,15 @@ name: Build App
 
 on:
   push:
-    branches: [main]
+    branches: [main, "debug/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-ios:
+    # Debug branches only need the macOS app.
+    if: ${{ !startsWith(github.ref, 'refs/heads/debug/') }}
     runs-on: macos-26
 
     steps:
