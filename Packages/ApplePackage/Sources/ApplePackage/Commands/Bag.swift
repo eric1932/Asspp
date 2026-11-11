@@ -99,8 +99,12 @@ public enum Bag {
         let urlBag = plist["urlBag"] as? [String: Any] ?? [:]
         let authURLString = (plist["authenticateAccount"] as? String) ?? (urlBag["authenticateAccount"] as? String)
 
-        let normalize: (String) -> URL? = attested ? attestedAuthEndpoint : normalizedAuthEndpoint
-        let authURL = authURLString.flatMap(normalize) ?? fallback
+        let normalizedURL: URL? = if let authURLString {
+            attested ? attestedAuthEndpoint(from: authURLString) : normalizedAuthEndpoint(from: authURLString)
+        } else {
+            nil
+        }
+        let authURL = normalizedURL ?? fallback
         if authURLString == nil {
             APLogger.debug("bag: no authenticateAccount in plist, using default auth endpoint")
         }
