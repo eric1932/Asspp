@@ -91,7 +91,9 @@ func (ipatoolBackend) Provision(ctx context.Context, state []byte, input provisi
 
 func (ipatoolBackend) StoreHeaders(ctx context.Context, state []byte, endpoint string, hardwareID []byte) (map[string]string, []byte, error) {
 	headers, next, err := storeauth.StoreAMDHeaders(ctx, state, endpoint, hardwareID)
-	if err != nil && strings.Contains(err.Error(), "not provisioned") {
+	// A state that only holds the machine (AuthKit) provisioning from machine-headers has not
+	// been through Store provisioning; AppleMediaServices then returns no proof at all.
+	if err != nil && (strings.Contains(err.Error(), "not provisioned") || strings.Contains(err.Error(), "returned no Store AMD proof")) {
 		return nil, nil, errNotProvisioned
 	}
 

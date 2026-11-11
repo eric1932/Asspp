@@ -74,7 +74,7 @@ public enum DeviceAttestationError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notProvisioned: "This device has not completed Apple Store provisioning yet."
+        case .notProvisioned: "This device has not completed Apple Store provisioning yet. Sign in to the account again to provision it."
         case .unsupported: "The device attestation provider does not support this operation."
         case let .unavailable(message): "The device attestation provider is unavailable: \(message)"
         case let .failed(message): "Device attestation failed: \(message)"

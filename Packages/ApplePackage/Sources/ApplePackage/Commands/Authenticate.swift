@@ -90,15 +90,22 @@ public actor Authenticator {
     private func attestedLogin(
         _ attestation: any DeviceAttestationProviding, client: HTTPClient, email: String, password: String, code: String,
     ) async throws -> Account {
+        // Like ipatool, any failure to produce an existing Store proof falls through to
+        // provisioning; only cancellation and an unreachable provider stop here.
+        var existingProof: [String: String]?
         do {
-            let proof = try await attestation.storeHeaders(deviceIdentifier: deviceIdentifier, url: baseEndpoint)
+            existingProof = try await attestation.storeHeaders(deviceIdentifier: deviceIdentifier, url: baseEndpoint)
+        } catch {
+            if error is CancellationError { throw error }
+            if let attestationError = error as? DeviceAttestationError, case .unavailable = attestationError { throw error }
+            APLogger.info("auth: stage 0 skipped, no Store proof: \(error.localizedDescription)")
+        }
+        if let proof = existingProof {
             APLogger.info("auth: stage 0, existing Store proof")
             switch try await login(client: client, email: email, password: password, code: code, machineHeaders: proof) {
             case let .account(account): return account
             case let .machineAction(action, _): APLogger.info("auth: stage 0 answered with machine action \(action), provisioning again")
             }
-        } catch DeviceAttestationError.notProvisioned {
-            APLogger.info("auth: stage 0 skipped, device not provisioned")
         }
 
         APLogger.info("auth: stage 1, machine headers")
