@@ -29,6 +29,11 @@ public extension SAPSigner {
         let reply = try await exchange(
             url: "https://fpinit.itunes.apple.com/v1/signSapSetup/legacy", payload: handshake.request, key: "sign-sap-setup-buffer",
         )
-        return try SAPSigner(session: handshake.complete(reply))
+        let session = try handshake.complete(reply)
+        // DEBUG BUILD: structural session shape only (no key material), to correlate rejected signatures.
+        APLogger.info(
+            "sap: session f2Material=\(16 + session.f2Tail.count) f1Address=0x\(String(session.f1MaterialAddress, radix: 16)) f3=\(session.f3.count)",
+        )
+        return try SAPSigner(session: session)
     }
 }
