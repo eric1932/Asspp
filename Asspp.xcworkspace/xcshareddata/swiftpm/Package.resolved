@@ -11,15 +11,6 @@
       }
     },
     {
-      "identity" : "applepackage",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Lakr233/ApplePackage",
-      "state" : {
-        "revision" : "773583a29c6b1f1b0d0783d0a15d3ddafcd85eec",
-        "version" : "2.0.3"
-      }
-    },
-    {
       "identity" : "async-http-client",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swift-server/async-http-client.git",
