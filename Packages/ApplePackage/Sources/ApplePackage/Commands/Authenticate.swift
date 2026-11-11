@@ -63,7 +63,16 @@ public actor Authenticator {
                 guard let resolved = URL(string: url.relativeString, relativeTo: endpoint)?.absoluteURL else {
                     try ensureFailed(Strings.failedToRetrieveRedirect)
                 }
-                endpoint = try Self.approvedEndpoint(resolved)
+                // Apple redirects to p<pod>-buy hosts without the trailing slash the
+                // legacy authenticate route needs; the bare path can answer a correctly
+                // signed request with an empty or HTML error. Normalize like the bag URL.
+                let normalized = Bag.normalizedAuthEndpoint(from: resolved.absoluteString) ?? resolved
+                if normalized != resolved {
+                    APLogger.info(
+                        "auth: redirect \(APLogger.safeURL(resolved.absoluteString)) normalized to \(APLogger.safeURL(normalized.absoluteString))",
+                    )
+                }
+                endpoint = try Self.approvedEndpoint(normalized)
                 redirects += 1
             case .codeRequired: throw AuthenticationError.verificationCodeRequired
             case .retry:
