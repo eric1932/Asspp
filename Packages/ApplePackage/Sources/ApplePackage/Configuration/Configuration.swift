@@ -15,6 +15,7 @@ public enum Configuration {
         var userAgent = "Configurator/2.17 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
         var tlsConfiguration: TLSConfiguration?
         var homePath = Configuration.defaultHomePath()
+        var deviceAttestationProvider: (any DeviceAttestationProviding)?
     }
 
     private static let state = LockedState(State())
@@ -56,6 +57,14 @@ public enum Configuration {
     public static var userAgent: String {
         get { state.withLock { $0.userAgent } }
         set { state.withLock { $0.userAgent = newValue } }
+    }
+
+    /// Device attestation for sign-in and downloads. `nil` (the default) keeps the
+    /// pre-attestation request format; Apple then rejects sign-in with
+    /// `AuthenticationError.deviceAttestationRequired`.
+    public static var deviceAttestationProvider: (any DeviceAttestationProviding)? {
+        get { state.withLock { $0.deviceAttestationProvider } }
+        set { state.withLock { $0.deviceAttestationProvider = newValue } }
     }
 
     public static var tlsConfiguration: TLSConfiguration {

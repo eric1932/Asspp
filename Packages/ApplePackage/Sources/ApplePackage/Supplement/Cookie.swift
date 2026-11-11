@@ -57,7 +57,10 @@ public extension Cookie {
 
 public extension [Cookie] {
     mutating func mergeCookies(_ cookies: [HTTPClient.Cookie]) {
-        let cookies = cookies.map { Cookie(copyFrom: $0) }
+        mergeCookies(cookies.map { Cookie(copyFrom: $0) })
+    }
+
+    mutating func mergeCookies(_ cookies: [Cookie]) {
         var dict: [String: Cookie] = [:]
         self.forEach { cookie in dict[cookie.name] = cookie }
         cookies.forEach { cookie in dict[cookie.name] = cookie }

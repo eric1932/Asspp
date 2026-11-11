@@ -8,10 +8,14 @@ extension SAPSigner: SAPRequestSigning {}
 
 public enum AuthenticationError: LocalizedError {
     case verificationCodeRequired
+    /// Apple asked for device attestation (or kept rejecting the request at its edge) and no
+    /// `Configuration.deviceAttestationProvider` is configured.
+    case deviceAttestationRequired
 
     public var errorDescription: String? {
         switch self {
         case .verificationCodeRequired: Strings.authRequiresVerificationCode
+        case .deviceAttestationRequired: Strings.authRequiresDeviceAttestation
         }
     }
 }

@@ -12,6 +12,7 @@ public enum Strings {
 
     static let authRequiresVerificationCode = "Authentication requires verification code\nIf no verification code prompted, try logging in at https://account.apple.com to trigger the alert and fill the code in the 2FA Code here."
     static let authFailed = "authentication failed"
+    static let authRequiresDeviceAttestation = "Apple now requires device attestation to sign in (since November 2026). Configure a device attestation provider and try again."
     static let authFailedUnknown = "authentication failed for an unknown reason"
     static let invalid2FACode = "invalid or expired 2FA code (failureType: 5005)"
     static let invalidAuthEndpoint = "invalid auth endpoint URL"

@@ -110,12 +110,15 @@ extension StoreDownloadEndpoint {
 
         while redirectAttempt <= maxRedirects {
             currentURL = try Self.validatedURL(currentURL)
+            // Each hop gets Store proof for its exact URL when attestation is configured.
+            let proof = try await DeviceAttestation.storeHeaders(for: currentURL)
             let request = try makeRequest(
                 account: account,
                 app: app,
                 url: currentURL,
                 guid: deviceIdentifier,
                 externalVersionID: externalVersionID,
+                attestationHeaders: proof,
             )
             let response = try await client.execute(request: request).get()
             defer { finalResponse = response }
@@ -170,6 +173,7 @@ extension StoreDownloadEndpoint {
         url: URL,
         guid: String,
         externalVersionID: String,
+        attestationHeaders: [String: String] = [:],
     ) throws -> HTTPClient.Request {
         var payload: [String: Any] = [
             "creditDisplay": "",
@@ -190,6 +194,7 @@ extension StoreDownloadEndpoint {
             ("iCloud-DSID", account.directoryServicesIdentifier),
             ("X-Dsid", account.directoryServicesIdentifier),
         ]
+        headers.append(contentsOf: attestationHeaders.sorted { $0.key < $1.key }.map { ($0.key, $0.value) })
 
         for item in account.cookie.buildCookieHeader(url) {
             headers.append(item)

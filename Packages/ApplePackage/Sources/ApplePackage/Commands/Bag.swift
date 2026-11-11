@@ -17,10 +17,17 @@ public enum Bag {
 
     private static let defaultAuthEndpoint = "https://auth.itunes.apple.com/auth/v1/native/fast/"
 
+    /// Attested sign-in follows ipatool 2.8.0: legacy Store hosts use this path.
+    static let attestedLegacyTrailingSlash = true
+
+    /// - Parameter attested: request the bag the way attested sign-in does (`ix=6`, the
+    ///   attested user agent) and normalize the endpoint for it.
     public static func fetchBag(
         redirectConfiguration: HTTPClient.Configuration.RedirectConfiguration = .follow(max: 8, allowCycles: false),
+        attested: Bool = false,
     ) async throws -> BagOutput {
         let deviceIdentifier = Configuration.deviceIdentifier
+        let fallback = attested ? attestedDefaultAuthEndpoint : URL(string: defaultAuthEndpoint)!
 
         let client = Configuration.makeHTTPClient(redirectConfiguration: redirectConfiguration)
         defer { _ = client.shutdown() }
@@ -29,14 +36,16 @@ public enum Bag {
         comps.scheme = "https"
         comps.host = "init.itunes.apple.com"
         comps.path = "/bag.xml"
-        comps.queryItems = [URLQueryItem(name: "guid", value: deviceIdentifier)]
+        comps.queryItems = attested
+            ? [URLQueryItem(name: "ix", value: "6"), URLQueryItem(name: "guid", value: deviceIdentifier)]
+            : [URLQueryItem(name: "guid", value: deviceIdentifier)]
         guard let url = comps.url else {
             APLogger.debug("bag: failed to construct URL, using default auth endpoint")
-            return BagOutput(authEndpoint: URL(string: defaultAuthEndpoint)!)
+            return BagOutput(authEndpoint: fallback)
         }
 
         let headers: [(String, String)] = [
-            ("User-Agent", Configuration.userAgent),
+            ("User-Agent", attested ? DeviceAttestation.userAgent : Configuration.userAgent),
             ("Accept", "application/xml"),
         ]
 
@@ -60,14 +69,19 @@ public enum Bag {
               let data = body.readData(length: body.readableBytes)
         else {
             APLogger.debug("bag: empty response body, using default auth endpoint")
-            return BagOutput(authEndpoint: URL(string: defaultAuthEndpoint)!)
+            return BagOutput(authEndpoint: fallback)
         }
 
-        return parse(data)
+        return parse(data, attested: attested)
     }
 
-    static func parse(_ data: Data) -> BagOutput {
+    static var attestedDefaultAuthEndpoint: URL {
+        legacyAuthEndpoint(URL(string: "https://buy.itunes.apple.com\(legacyAuthenticatePath)")!, trailingSlash: attestedLegacyTrailingSlash)
+    }
+
+    static func parse(_ data: Data, attested: Bool = false) -> BagOutput {
         let plistData = extractPlistData(from: data)
+        let fallback = attested ? attestedDefaultAuthEndpoint : URL(string: defaultAuthEndpoint)!
 
         guard
             let plist = try? PropertyListSerialization.propertyList(
@@ -77,7 +91,7 @@ public enum Bag {
             ) as? [String: Any]
         else {
             APLogger.debug("bag: failed to parse plist, using default auth endpoint")
-            return BagOutput(authEndpoint: URL(string: defaultAuthEndpoint)!)
+            return BagOutput(authEndpoint: fallback)
         }
 
         // authenticateAccount used to live inside the nested urlBag dict,
@@ -85,7 +99,8 @@ public enum Bag {
         let urlBag = plist["urlBag"] as? [String: Any] ?? [:]
         let authURLString = (plist["authenticateAccount"] as? String) ?? (urlBag["authenticateAccount"] as? String)
 
-        let authURL = authURLString.flatMap(normalizedAuthEndpoint) ?? URL(string: defaultAuthEndpoint)!
+        let normalize: (String) -> URL? = attested ? attestedAuthEndpoint : normalizedAuthEndpoint
+        let authURL = authURLString.flatMap(normalize) ?? fallback
         if authURLString == nil {
             APLogger.debug("bag: no authenticateAccount in plist, using default auth endpoint")
         }
@@ -157,6 +172,17 @@ public enum Bag {
         guard path == legacyAuthenticatePath else { return url }
         comps.path = trailingSlash ? path + "/" : path
         return comps.url ?? url
+    }
+
+    /// Attested sign-in normalizes like ipatool 2.8.0: legacy Store hosts always use the
+    /// authenticate path (slash per `attestedLegacyTrailingSlash`); other hosts, including
+    /// the native `auth.itunes.apple.com` endpoint, are used exactly as advertised.
+    static func attestedAuthEndpoint(from urlString: String) -> URL? {
+        guard var comps = URLComponents(string: urlString), comps.scheme?.lowercased() == "https" else { return nil }
+        if let host = comps.host?.lowercased(), isLegacyAuthHost(host) {
+            comps.path = attestedLegacyTrailingSlash ? legacyAuthenticatePath + "/" : legacyAuthenticatePath
+        }
+        return comps.url
     }
 
     /// The bag XML response wraps the plist inside `<Document><Protocol><plist>...</plist>`.
