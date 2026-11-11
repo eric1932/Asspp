@@ -64,8 +64,11 @@ public actor Authenticator {
             APLogger.info(
                 "auth: POST \(APLogger.safeURL(target.absoluteString)) slash=\(slash) [\(code.isEmpty ? "password" : "password+code")] -> HTTP \(response.status.code), \(response.body?.readableBytes ?? 0) bytes, backend=\(response.headers.contains(name: "x-apple-jingle-correlation-key"))",
             )
-            if response.status != .ok, let body = response.body, body.readableBytes > 0 {
-                APLogger.info("auth: non-200 body: \(String(decoding: body.readableBytesView.prefix(300), as: UTF8.self))")
+            // Only edge HTML error pages; store plists (even redirects) echo the Apple ID.
+            if response.status != .ok, let body = response.body, body.readableBytes > 0,
+               response.headers.first(name: "content-type")?.lowercased().contains("text/html") == true
+            {
+                APLogger.info("auth: non-200 html body: \(String(decoding: body.readableBytesView.prefix(300), as: UTF8.self))")
             }
             if Self.isEdgeRejection(response) {
                 edgeRejections += 1
