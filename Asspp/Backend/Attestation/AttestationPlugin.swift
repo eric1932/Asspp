@@ -11,9 +11,10 @@ import Foundation
 /// `asspp_attestation_plugin_v1`, as in the protocol at
 /// https://github.com/eric1932/asspp-attest/blob/main/docs/PROTOCOL.md.
 ///
-/// Asspp does not ship one. On iOS a user can add one to the app's Frameworks
-/// folder when signing the IPA. Asspp only looks the plugin up at runtime and
-/// talks to it through four C function pointers; nothing is linked in.
+/// Asspp does not ship one. On iOS a user adds one to the app's Frameworks
+/// folder when signing the IPA; on macOS they can also drop it into
+/// Application Support/Asspp/Plugins. Asspp only looks the plugin up at
+/// runtime and talks to it through four C function pointers; nothing is linked in.
 final class AttestationPlugin: @unchecked Sendable {
     typealias Entry = @convention(c) () -> UnsafeRawPointer?
     typealias Configure = @convention(c) (UnsafePointer<CChar>?) -> Int32
@@ -43,24 +44,42 @@ final class AttestationPlugin: @unchecked Sendable {
         self.release = release
     }
 
-    /// The plugin in this process, loading it from the app's Frameworks folder if needed.
+    /// Folders searched for `AssppAttest.framework`: the app's own Frameworks folder (where a
+    /// signing tool puts an injected framework) and, on macOS, a plugin folder the user can
+    /// drop it into without touching the app.
+    static var searchFolders: [URL] {
+        var folders = [Bundle.main.privateFrameworksURL].compactMap { $0 }
+        #if os(macOS)
+            if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                folders.append(support.appendingPathComponent("Asspp/Plugins", isDirectory: true))
+            }
+        #endif
+        return folders
+    }
+
+    /// The plugin in this process, loading it from a search folder if needed.
     /// Nil when there is none or its table is not version 1.
     static func load() -> AttestationPlugin? {
         if let plugin = resolve() {
             return plugin
         }
 
-        guard let frameworks = Bundle.main.privateFrameworksURL else { return nil }
-        let path = frameworks.appendingPathComponent(frameworkPath).path
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        for folder in searchFolders {
+            let path = folder.appendingPathComponent(frameworkPath).path
+            guard FileManager.default.fileExists(atPath: path) else { continue }
 
-        // RTLD_GLOBAL: a plugin may look up its own dependencies with dlsym(RTLD_DEFAULT, ...).
-        guard dlopen(path, RTLD_NOW | RTLD_GLOBAL) != nil else {
-            let reason = dlerror().map { String(cString: $0) } ?? "unknown error"
-            logger.error("device attestation: could not load the plugin at \(path): \(reason)")
-            return nil
+            // RTLD_GLOBAL: a plugin may look up its own dependencies with dlsym(RTLD_DEFAULT, ...).
+            guard dlopen(path, RTLD_NOW | RTLD_GLOBAL) != nil else {
+                let reason = dlerror().map { String(cString: $0) } ?? "unknown error"
+                logger.error("device attestation: could not load the plugin at \(path): \(reason)")
+                continue
+            }
+            if let plugin = resolve() {
+                logger.info("device attestation: loaded the plugin from \(folder.path)")
+                return plugin
+            }
         }
-        return resolve()
+        return nil
     }
 
     private static func resolve() -> AttestationPlugin? {

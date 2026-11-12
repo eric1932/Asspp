@@ -95,10 +95,10 @@ class AppStore {
             }
         }
         ApplePackage.Configuration.deviceIdentifier = deviceIdentifier
-        // A configured service wins, so an app with a plugin inside can still be pointed at one.
-        var transport: (any AttestationServiceTransport)? = HTTPAttestationTransport.fromUserDefaults()
+        // A plugin in the app wins; a configured service (a NAS, say) is the fallback.
+        var transport: (any AttestationServiceTransport)? = PluginAttestationTransport.make()
         if transport == nil {
-            transport = PluginAttestationTransport.make()
+            transport = HTTPAttestationTransport.fromUserDefaults()
         }
         if let transport {
             ApplePackage.Configuration.deviceAttestationProvider = AttestationServiceProvider(transport: transport)
