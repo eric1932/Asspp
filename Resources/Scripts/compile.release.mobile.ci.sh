@@ -14,6 +14,15 @@ cd $SRCROOT
 git clean -fdx -f
 git reset --hard
 
+# Fork builds can link the embedded attestation runtime (Tools/attestd/embedded).
+# The xcframework comes from the embedded-runtime workflow and is passed in
+# here, because the clean above removes untracked files.
+if [[ -n "${ASSPP_ATTEST_XCFRAMEWORK:-}" ]]; then
+    mkdir -p "$SRCROOT/Packages/AssppEmbeddedAttestation/Artifacts"
+    cp -R "$ASSPP_ATTEST_XCFRAMEWORK" "$SRCROOT/Packages/AssppEmbeddedAttestation/Artifacts/AssppAttest.xcframework"
+    echo "[+] embedded attestation runtime added"
+fi
+
 # Generate Developer.xcconfig for CI (codesign completely disabled)
 cat >"$SRCROOT/Configuration/Developer.xcconfig" <<'EOF'
 // CI-generated Developer.xcconfig

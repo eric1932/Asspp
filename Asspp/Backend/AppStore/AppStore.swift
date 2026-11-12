@@ -95,10 +95,15 @@ class AppStore {
             }
         }
         ApplePackage.Configuration.deviceIdentifier = deviceIdentifier
-        if let provider = RemoteAttestationProvider.fromUserDefaults() {
-            ApplePackage.Configuration.deviceAttestationProvider = provider
+        // A configured service wins, so a build with the embedded runtime can still be pointed at one.
+        var transport: (any AttestationServiceTransport)? = HTTPAttestationTransport.fromUserDefaults()
+        if transport == nil {
+            transport = EmbeddedAttestationTransport.make()
+        }
+        if let transport {
+            ApplePackage.Configuration.deviceAttestationProvider = AttestationServiceProvider(transport: transport)
             ApplePackage.Configuration.userAgent = DeviceAttestation.userAgent
-            logger.info("device attestation: using service at \(provider.baseURL.absoluteString)")
+            logger.info("device attestation: using \(transport.summary)")
         } else {
             logger.info("device attestation: not configured")
         }

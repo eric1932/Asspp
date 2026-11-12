@@ -1,0 +1,102 @@
+name: ios-embedded
+
+# Fork-only: the iOS app with the embedded attestation runtime, as an unsigned
+# IPA. The runtime links Unicorn (GPL-2.0); see Packages/AssppEmbeddedAttestation.
+
+on:
+  push:
+    branches: ["ios/**"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label for the app build (macos-15-intel when arm64 capacity is short)"
+        required: false
+        default: macos-26
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-embedded-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    uses: ./.github/workflows/embedded-runtime.yml
+    with:
+      simulator_test: false
+
+  app:
+    needs: runtime
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest non-beta Xcode
+        run: |
+          set -euo pipefail
+          best_path=""
+          best_ver=""
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            info="$app/Contents/Info.plist"
+            [ -f "$info" ] || continue
+            # Skip beta/release-candidate installs.
+            case "$(printf '%s' "$app" | tr '[:upper:]' '[:lower:]')" in
+              *beta*|*_rc*) continue ;;
+            esac
+            ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info" 2>/dev/null || true)"
+            [ -n "$ver" ] || continue
+            if [ -z "$best_ver" ] || [ "$(printf '%s\n%s\n' "$best_ver" "$ver" | sort -V | tail -1)" = "$ver" ]; then
+              best_ver="$ver"
+              best_path="$app"
+            fi
+          done
+          if [ -z "$best_path" ]; then
+            echo "::error::No non-beta Xcode found"
+            exit 1
+          fi
+          echo "Selected Xcode $best_ver at $best_path"
+          sudo xcode-select -s "$best_path"
+          xcodebuild -version
+
+      - name: Ensure iOS platform is installed
+        run: xcodebuild -downloadPlatform iOS || true
+
+      - name: Install Procursus
+        uses: dhinakg/procursus-action@main
+        with:
+          packages: ldid findutils sed coreutils make
+
+      - name: Download the embedded runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: AssppAttest-xcframework
+          path: ${{ runner.temp }}/attest
+
+      - name: Build
+        env:
+          ASSPP_ATTEST_XCFRAMEWORK: ${{ runner.temp }}/attest/AssppAttest.xcframework
+        run: |
+          set -euo pipefail
+          test -d "$ASSPP_ATTEST_XCFRAMEWORK"
+          chmod +x Resources/Scripts/compile.release.mobile.ci.sh
+          ./Resources/Scripts/compile.release.mobile.ci.sh "$(pwd)" "$RUNNER_TEMP/Asspp-embedded.ipa"
+
+      - name: Check that the IPA carries the runtime
+        run: |
+          set -euo pipefail
+          unzip -l "$RUNNER_TEMP/Asspp-embedded.ipa" | grep -E 'Payload/Asspp.app/Frameworks/AssppAttest.framework/AssppAttest$'
+          ls -l "$RUNNER_TEMP/Asspp-embedded.ipa"
+          mkdir -p "$RUNNER_TEMP/dist"
+          cp "$RUNNER_TEMP/Asspp-embedded.ipa" "$RUNNER_TEMP/dist/"
+          cp -R "$RUNNER_TEMP/attest/NOTICES" "$RUNNER_TEMP/dist/NOTICES"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asspp-embedded-ios
+          path: ${{ runner.temp }}/dist/

@@ -10,12 +10,18 @@ on:
     branches: ["ios/**"]
     paths: ["Tools/attestd/**", ".github/workflows/embedded-runtime.yml"]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      simulator_test:
+        description: "Run kbsync in an iOS simulator (about ten minutes, mostly downloading Apple's components)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: embedded-runtime-${{ github.ref }}
+  group: ${{ github.workflow }}-runtime-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -76,6 +82,7 @@ jobs:
             out/device iphoneos arm64-apple-ios16.0 "${GITHUB_SHA::7}" "$IPATOOL_COMMIT"
 
       - name: Run kbsync in an iOS simulator
+        if: ${{ inputs.simulator_test != false }}
         run: |
           set -euo pipefail
           sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
