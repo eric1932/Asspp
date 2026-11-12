@@ -23,7 +23,7 @@ final class AttestationActivity {
         case generatingDownloadKey
         case working
 
-        /// The step for an asspp-attestd method.
+        /// The step for a protocol method.
         init(method: String) {
             switch method {
             case "prepare": self = .downloadingComponents

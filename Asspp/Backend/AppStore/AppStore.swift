@@ -95,10 +95,10 @@ class AppStore {
             }
         }
         ApplePackage.Configuration.deviceIdentifier = deviceIdentifier
-        // A configured service wins, so a build with the embedded runtime can still be pointed at one.
+        // A configured service wins, so an app with a plugin inside can still be pointed at one.
         var transport: (any AttestationServiceTransport)? = HTTPAttestationTransport.fromUserDefaults()
         if transport == nil {
-            transport = EmbeddedAttestationTransport.make()
+            transport = PluginAttestationTransport.make()
         }
         if let transport {
             ApplePackage.Configuration.deviceAttestationProvider = AttestationServiceProvider(transport: transport)

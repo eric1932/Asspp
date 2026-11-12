@@ -1,7 +1,9 @@
-name: ios-embedded
+name: ios
 
-# Fork-only: the iOS app with the embedded attestation runtime, as an unsigned
-# IPA. The runtime links Unicorn (GPL-2.0); see Packages/AssppEmbeddedAttestation.
+# The iOS app as an unsigned IPA, on ios/** branches. It contains no attestation
+# plugin: device attestation comes from an asspp-attestd service or from
+# AssppAttest.framework (https://github.com/eric1932/asspp-attest), which a user
+# adds when signing. Do not publish an IPA with the framework inside.
 
 on:
   push:
@@ -17,17 +19,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-embedded-${{ github.ref }}
+  group: ios-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  runtime:
-    uses: ./.github/workflows/embedded-runtime.yml
-    with:
-      simulator_test: false
-
   app:
-    needs: runtime
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 90
 
@@ -71,32 +67,25 @@ jobs:
         with:
           packages: ldid findutils sed coreutils make
 
-      - name: Download the embedded runtime
-        uses: actions/download-artifact@v4
-        with:
-          name: AssppAttest-xcframework
-          path: ${{ runner.temp }}/attest
-
       - name: Build
-        env:
-          ASSPP_ATTEST_XCFRAMEWORK: ${{ runner.temp }}/attest/AssppAttest.xcframework
         run: |
           set -euo pipefail
-          test -d "$ASSPP_ATTEST_XCFRAMEWORK"
           chmod +x Resources/Scripts/compile.release.mobile.ci.sh
-          ./Resources/Scripts/compile.release.mobile.ci.sh "$(pwd)" "$RUNNER_TEMP/Asspp-embedded.ipa"
+          ./Resources/Scripts/compile.release.mobile.ci.sh "$(pwd)" "$RUNNER_TEMP/Asspp.ipa"
 
-      - name: Check that the IPA carries the runtime
+      - name: Check that the IPA carries no plugin
         run: |
           set -euo pipefail
-          unzip -l "$RUNNER_TEMP/Asspp-embedded.ipa" | grep -E 'Payload/Asspp.app/Frameworks/AssppAttest.framework/AssppAttest$'
-          ls -l "$RUNNER_TEMP/Asspp-embedded.ipa"
+          if unzip -l "$RUNNER_TEMP/Asspp.ipa" | grep -q 'AssppAttest'; then
+            echo "::error::the IPA contains AssppAttest"
+            exit 1
+          fi
+          ls -l "$RUNNER_TEMP/Asspp.ipa"
           mkdir -p "$RUNNER_TEMP/dist"
-          cp "$RUNNER_TEMP/Asspp-embedded.ipa" "$RUNNER_TEMP/dist/"
-          cp -R "$RUNNER_TEMP/attest/NOTICES" "$RUNNER_TEMP/dist/NOTICES"
+          cp "$RUNNER_TEMP/Asspp.ipa" "$RUNNER_TEMP/dist/"
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Asspp-embedded-ios
+          name: Asspp-ios
           path: ${{ runner.temp }}/dist/

@@ -8,7 +8,8 @@
 import ApplePackage
 import Foundation
 
-/// Where an asspp-attestd call goes: over HTTP to a service, or into the runtime linked into the app.
+/// Where an attestation call goes: over HTTP to a service, or to a plugin loaded into the app.
+/// Both speak the protocol in https://github.com/eric1932/asspp-attest/blob/main/docs/PROTOCOL.md.
 protocol AttestationServiceTransport: Sendable {
     /// One phrase for the log, without secrets.
     var summary: String { get }
@@ -19,7 +20,7 @@ protocol AttestationServiceTransport: Sendable {
     func send(_ method: String, body: Data) async throws -> (status: Int, body: Data)
 }
 
-/// Device attestation from asspp-attestd (Tools/attestd), reached through a transport.
+/// Device attestation from an attestation plugin or service, reached through a transport.
 struct AttestationServiceProvider: DeviceAttestationProviding {
     let transport: any AttestationServiceTransport
 
