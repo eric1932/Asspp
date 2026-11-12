@@ -1,0 +1,123 @@
+name: embedded-runtime
+
+# Builds AssppAttest.xcframework: asspp-attestd as an in-process library with an
+# interpreter-only Unicorn, for running device attestation inside the iOS app.
+# The simulator slice is exercised in an iOS simulator with kbsync, which needs
+# no Apple account. Runs only on ios/** branches.
+
+on:
+  push:
+    branches: ["ios/**"]
+    paths: ["Tools/attestd/**", ".github/workflows/embedded-runtime.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: embedded-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch pinned ipatool and add asspp-attestd
+        run: |
+          set -euo pipefail
+          commit=$(tr -d '[:space:]' < Tools/attestd/IPATOOL_COMMIT)
+          git init -q ipatool
+          git -C ipatool remote add origin https://github.com/majd/ipatool.git
+          git -C ipatool fetch -q --depth 1 origin "$commit"
+          git -C ipatool checkout -q FETCH_HEAD
+          mkdir -p ipatool/cmd/asspp-attestd
+          cp Tools/attestd/*.go ipatool/cmd/asspp-attestd/
+          echo "IPATOOL_COMMIT=$commit" >> "$GITHUB_ENV"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ipatool/go.mod
+          cache-dependency-path: ipatool/go.sum
+
+      - name: Vet and test
+        working-directory: ipatool
+        run: |
+          set -euo pipefail
+          go vet ./cmd/asspp-attestd
+          CGO_ENABLED=1 go vet -tags asspp_embedded ./cmd/asspp-attestd
+          go test -count=1 ./cmd/asspp-attestd
+
+      - name: Fetch pinned interpreter-only Unicorn sources
+        run: |
+          set -euo pipefail
+          fetch() {
+            mkdir -p "$3"
+            curl -fsSL --retry 3 "https://codeload.github.com/$1/tar.gz/$2" | tar -xz -C "$3" --strip-components 1
+          }
+          # The TCI fork, plus qemu/target restored from its exact Unicorn 2.1.4 base.
+          fetch 1rhino2/unicorn-tci 6d0794492de065cdf7e05d7658b4c1b157a34062 unicorn-tci
+          fetch unicorn-engine/unicorn 8028ec436f2d9376525352dd38ed9ed6b9f6be10 unicorn-base
+          cp -R unicorn-base/qemu/target unicorn-tci/unicorn-engine-sys-tci/qemu/
+
+      - name: Build the simulator slice
+        run: |
+          Tools/attestd/embedded/build-runtime.sh ipatool unicorn-tci/unicorn-engine-sys-tci \
+            out/simulator iphonesimulator arm64-apple-ios16.0-simulator "${GITHUB_SHA::7}" "$IPATOOL_COMMIT"
+
+      - name: Build the device slice
+        run: |
+          Tools/attestd/embedded/build-runtime.sh ipatool unicorn-tci/unicorn-engine-sys-tci \
+            out/device iphoneos arm64-apple-ios16.0 "${GITHUB_SHA::7}" "$IPATOOL_COMMIT"
+
+      - name: Run kbsync in an iOS simulator
+        run: |
+          set -euo pipefail
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios16.0-simulator -isysroot "$sdk" \
+            -I Tools/attestd/embedded Tools/attestd/embedded/harness.c \
+            -F "$PWD/out/simulator" -framework AssppAttest -Wl,-rpath,"$PWD/out/simulator" \
+            -o out/simulator/harness
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          runtimes = json.load(sys.stdin)["devices"]
+          for runtime in sorted(runtimes, reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              for device in runtimes[runtime]:
+                  if "iPhone" in device["name"]:
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("no iPhone simulator available")
+          ')
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          home="$PWD/out/simulator/home"
+          mkdir -p "$home/Library/Caches" "$home/state"
+          SIMCTL_CHILD_HOME="$home" xcrun simctl spawn "$udid" "$PWD/out/simulator/harness" "$home/state" 3
+          xcrun simctl shutdown "$udid"
+
+      - name: Create the xcframework
+        run: |
+          set -euo pipefail
+          xcodebuild -create-xcframework \
+            -framework out/device/AssppAttest.framework \
+            -framework out/simulator/AssppAttest.framework \
+            -output dist/AssppAttest.xcframework
+          mkdir -p dist/NOTICES
+          cp "$(go env GOROOT)/LICENSE" dist/NOTICES/Go-LICENSE
+          cp ipatool/LICENSE dist/NOTICES/ipatool-LICENSE
+          cp unicorn-tci/unicorn-engine-sys-tci/COPYING dist/NOTICES/unicorn-COPYING
+          find dist -maxdepth 3 | sort
+          shasum -a 256 dist/AssppAttest.xcframework/*/AssppAttest.framework/AssppAttest
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssppAttest-xcframework
+          path: dist/

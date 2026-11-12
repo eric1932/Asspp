@@ -29,6 +29,11 @@ func newServer(store *stateStore, token string, backend backend) *server {
 }
 
 func (s *server) routes() http.Handler {
+	return s.authenticated(s.mux())
+}
+
+// mux holds the routes without authentication, for in-process callers.
+func (s *server) mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", s.health)
 	mux.HandleFunc("POST /v1/prepare", s.serialized(s.prepare))
@@ -37,7 +42,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/store-headers", s.serialized(s.storeHeaders))
 	mux.HandleFunc("POST /v1/kbsync", s.serialized(s.kbsync))
 
-	return s.authenticated(mux)
+	return mux
 }
 
 func (s *server) authenticated(next http.Handler) http.Handler {
