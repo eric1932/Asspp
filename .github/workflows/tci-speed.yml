@@ -1,0 +1,92 @@
+name: tci-speed
+
+# Measurement probe: how much slower is ipatool's emulation on an
+# interpreter-only Unicorn (what a non-jailbroken iPhone would need) than on the
+# stock JIT build? Runs only on probe/** branches. No Apple account is used;
+# the job downloads Apple's public components the same way ipatool does.
+
+on:
+  push:
+    branches: ["probe/**"]
+    paths: ["Tools/tci-speed/**", ".github/workflows/tci-speed.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tci-speed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Describe the runner
+        run: |
+          uname -sm
+          sysctl -n machdep.cpu.brand_string 2>/dev/null || lscpu | grep -E 'Model name|^CPU\(s\)' || true
+
+      - name: Fetch pinned ipatool and add the probe
+        run: |
+          set -euo pipefail
+          commit=$(tr -d '[:space:]' < Tools/attestd/IPATOOL_COMMIT)
+          git init -q ipatool
+          git -C ipatool remote add origin https://github.com/majd/ipatool.git
+          git -C ipatool fetch -q --depth 1 origin "$commit"
+          git -C ipatool checkout -q FETCH_HEAD
+          mkdir -p ipatool/cmd/tci-speed
+          cp Tools/tci-speed/main.go ipatool/cmd/tci-speed/
+          python3 Tools/tci-speed/patch_loader.py ipatool
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ipatool/go.mod
+          cache-dependency-path: ipatool/go.sum
+
+      - name: Build the probe
+        working-directory: ipatool
+        run: go build -trimpath -o ../tci-speed-probe ./cmd/tci-speed
+
+      - name: Build interpreter-only Unicorn with the aarch64 guest
+        run: |
+          set -euo pipefail
+          fetch() {
+            mkdir -p "$3"
+            curl -fsSL --retry 3 "https://codeload.github.com/$1/tar.gz/$2" | tar -xz -C "$3" --strip-components 1
+          }
+          # Same pinned sources as the September SAP runtime: the TCI fork, plus
+          # qemu/target restored from its exact Unicorn 2.1.4 base.
+          fetch 1rhino2/unicorn-tci 6d0794492de065cdf7e05d7658b4c1b157a34062 unicorn-tci
+          fetch unicorn-engine/unicorn 8028ec436f2d9376525352dd38ed9ed6b9f6be10 unicorn-base
+          cp -R unicorn-base/qemu/target unicorn-tci/unicorn-engine-sys-tci/qemu/
+          cmake -S unicorn-tci/unicorn-engine-sys-tci -B tci-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="$(uname -m)" \
+            -DUNICORN_INTERPRETER=ON \
+            -DUNICORN_ARCH=aarch64 \
+            -DUNICORN_BUILD_TESTS=OFF \
+            -DUNICORN_INSTALL=OFF \
+            -DBUILD_SHARED_LIBS=ON
+          grep -q '#define CONFIG_TCG_INTERPRETER 1' tci-build/config-host.h
+          cmake --build tci-build --parallel 4
+          library=$(find "$PWD/tci-build" -maxdepth 2 \( -name 'libunicorn.2.dylib' -o -name 'libunicorn.so.2' \) | head -1)
+          test -n "$library"
+          ls -l "$library"
+          echo "TCI_LIBRARY=$library" >> "$GITHUB_ENV"
+
+      - name: Time kbsync on the stock JIT Unicorn
+        run: ./tci-speed-probe
+
+      - name: Time kbsync on the interpreter-only Unicorn
+        run: ASSPP_UNICORN_LIBRARY="$TCI_LIBRARY" ./tci-speed-probe
