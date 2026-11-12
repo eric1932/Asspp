@@ -19,7 +19,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A macOS asspp-attestd whose libunicorn can be overridden with
+  # ASSPP_UNICORN_LIBRARY, plus the interpreter-only library, for timing the
+  # steps that need a provisioned state on a developer machine.
+  artifacts:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch pinned ipatool and add asspp-attestd with the loader override
+        run: |
+          set -euo pipefail
+          commit=$(tr -d '[:space:]' < Tools/attestd/IPATOOL_COMMIT)
+          git init -q ipatool
+          git -C ipatool remote add origin https://github.com/majd/ipatool.git
+          git -C ipatool fetch -q --depth 1 origin "$commit"
+          git -C ipatool checkout -q FETCH_HEAD
+          mkdir -p ipatool/cmd/asspp-attestd
+          cp Tools/attestd/*.go ipatool/cmd/asspp-attestd/
+          python3 Tools/tci-speed/patch_loader.py ipatool
+          echo "IPATOOL_COMMIT=$commit" >> "$GITHUB_ENV"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ipatool/go.mod
+          cache-dependency-path: ipatool/go.sum
+
+      - name: Build asspp-attestd
+        working-directory: ipatool
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          set -euo pipefail
+          mkdir -p ../out
+          go build -trimpath \
+            -ldflags "-X main.version=${GITHUB_SHA::7}-probe -X main.ipatoolCommit=${IPATOOL_COMMIT}" \
+            -o ../out/asspp-attestd-probe ./cmd/asspp-attestd
+
+      - name: Build interpreter-only Unicorn with the aarch64 guest
+        run: |
+          set -euo pipefail
+          fetch() {
+            mkdir -p "$3"
+            curl -fsSL --retry 3 "https://codeload.github.com/$1/tar.gz/$2" | tar -xz -C "$3" --strip-components 1
+          }
+          fetch 1rhino2/unicorn-tci 6d0794492de065cdf7e05d7658b4c1b157a34062 unicorn-tci
+          fetch unicorn-engine/unicorn 8028ec436f2d9376525352dd38ed9ed6b9f6be10 unicorn-base
+          cp -R unicorn-base/qemu/target unicorn-tci/unicorn-engine-sys-tci/qemu/
+          cmake -S unicorn-tci/unicorn-engine-sys-tci -B tci-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DUNICORN_INTERPRETER=ON \
+            -DUNICORN_ARCH=aarch64 \
+            -DUNICORN_BUILD_TESTS=OFF \
+            -DUNICORN_INSTALL=OFF \
+            -DBUILD_SHARED_LIBS=ON
+          grep -q '#define CONFIG_TCG_INTERPRETER 1' tci-build/config-host.h
+          cmake --build tci-build --parallel 4
+          library=$(find "$PWD/tci-build" -maxdepth 2 -name 'libunicorn.2.dylib' | head -1)
+          test -n "$library"
+          cp "$library" out/libunicorn-interpreter.dylib
+          file out/*
+          shasum -a 256 out/*
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestd-interpreter-probe-darwin-arm64
+          path: out/
+
   measure:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
