@@ -49,13 +49,15 @@ public enum EmbeddedAttestationRuntime {
     /// Runs one method ("machine-headers", "kbsync", ...) with its JSON body.
     /// Calls take seconds, or minutes the first time while Apple's components are
     /// downloaded. They run off the cooperative thread pool and honor task cancellation.
+    /// "health" does not wait for a running call, so it can report progress.
     public static func call(_ method: String, body: Data) async throws -> Response {
         #if canImport(AssppAttest)
             let token = tokens.next()
             let canceled = Flag()
+            let target = method == "health" ? statusQueue : queue
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Response, Error>) in
-                    queue.async {
+                    target.async {
                         if canceled.isSet {
                             continuation.resume(throwing: CancellationError())
                             return
@@ -82,6 +84,7 @@ public enum EmbeddedAttestationRuntime {
     #if canImport(AssppAttest)
         /// One emulator operation runs at a time, so one serial queue is enough.
         private static let queue = DispatchQueue(label: "wiki.qaq.asspp.attest.embedded", qos: .userInitiated)
+        private static let statusQueue = DispatchQueue(label: "wiki.qaq.asspp.attest.embedded.status", qos: .utility)
         private static let tokens = TokenSource()
     #endif
 }

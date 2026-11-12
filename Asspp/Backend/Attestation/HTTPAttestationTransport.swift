@@ -41,10 +41,15 @@ struct HTTPAttestationTransport: AttestationServiceTransport {
 
     func send(_ method: String, body: Data) async throws -> (status: Int, body: Data) {
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/\(method)"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = body
+        if method == "health" {
+            request.httpMethod = "GET"
+            request.timeoutInterval = 10
+        } else {
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
 
         do {
             let (data, response) = try await Self.session.data(for: request)

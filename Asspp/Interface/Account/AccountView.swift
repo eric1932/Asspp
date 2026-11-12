@@ -52,6 +52,7 @@ struct AccountView: View {
             }
             .sheet(isPresented: $addAccount) {
                 AddAccountView()
+                    .attestationActivityBanner()
                     .frame(minWidth: 480, idealWidth: 520, minHeight: 340, idealHeight: 380)
             }
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -174,6 +175,7 @@ struct AccountView: View {
                 NavigationStack {
                     AddAccountView()
                 }
+                .attestationActivityBanner()
             }
         }
     #endif

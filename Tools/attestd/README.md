@@ -36,11 +36,13 @@ prints it once. Every request needs `Authorization: Bearer <token>`.
 All endpoints are JSON. Errors are `{"code", "message"}` with codes
 `unauthorized` (401), `invalid_request` (400), `not_provisioned` (409),
 `assets_unavailable` (503), `upstream_failed` (502), `emulator_failed` (500),
-`canceled` (499). One emulator operation runs at a time.
+`canceled` (499). One emulator operation runs at a time; `health` answers
+while one runs. Its `assetBytes` counts the bytes read so far from Apple's
+update CDN, so a client can show how far the first download has got.
 
 | Endpoint | Request | Response | ipatool |
 |---|---|---|---|
-| `GET /v1/health` | | `version, ipatoolCommit, assetsCached, unicornCached` | |
+| `GET /v1/health` | | `version, ipatoolCommit, assetsCached, unicornCached, assetBytes` | |
 | `POST /v1/prepare` | `{}` | `{}` | `assets.Load` |
 | `POST /v1/machine-headers` | `guid` | `headers` | `storeauth.AnisetteHeaders` (drops existing Store provisioning) |
 | `POST /v1/provision` | `guid, challenge, endpoint, userAgent, machineHeaders, cookies` | `cookies` set by Apple | `machine.GenerateKBSync(^1)` + `storeauth.ProvisionStoreAnisette` |

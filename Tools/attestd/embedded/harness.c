@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
     int runs = argc > 2 ? atoi(argv[2]) : 2;
     int failed = run("health", NULL, 1) != 0;
     failed |= run("prepare", "{}", 0) != 0;
+    failed |= run("health", NULL, 1) != 0; // assetBytes: how much the first prepare downloaded
     for (int index = 0; index < runs; index++) {
         failed |= run("kbsync", "{\"guid\":\"02005E102030\",\"dsid\":\"12345678901\"}", 0) != 0;
     }

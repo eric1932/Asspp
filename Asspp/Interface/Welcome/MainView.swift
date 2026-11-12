@@ -42,6 +42,7 @@ struct MainView: View {
                         detailView(for: .home)
                     }
                 }
+                .attestationActivityBanner()
                 .frame(minHeight: 250)
                 .navigationSplitViewColumnWidth(min: 480, ideal: 500)
             }
@@ -179,17 +180,22 @@ struct MainView: View {
         var body: some View {
             TabView {
                 WelcomeView()
+                    .attestationActivityBanner()
                     .tabItem { Label("Home", systemImage: "house") }
                 AccountView()
+                    .attestationActivityBanner()
                     .tabItem { Label("Accounts", systemImage: "person") }
                 SearchView()
+                    .attestationActivityBanner()
                     .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 DownloadView()
+                    .attestationActivityBanner()
                     .tabItem {
                         Label("Downloads", systemImage: "arrow.down.circle")
                     }
                     .badge(dvm.runningTaskCount) // putting badge inside will not work on iOS versions before 18
                 SettingView()
+                    .attestationActivityBanner()
                     .tabItem { Label("Settings", systemImage: "gear") }
             }
         }
@@ -201,14 +207,14 @@ struct MainView: View {
 
         var body: some View {
             TabView {
-                Tab("Home", systemImage: "house") { WelcomeView() }
-                Tab("Accounts", systemImage: "person") { AccountView() }
+                Tab("Home", systemImage: "house") { WelcomeView().attestationActivityBanner() }
+                Tab("Accounts", systemImage: "person") { AccountView().attestationActivityBanner() }
                 Tab(role: .search) {
-                    SearchView()
+                    SearchView().attestationActivityBanner()
                 }
-                Tab("Downloads", systemImage: "arrow.down.circle") { DownloadView() }
+                Tab("Downloads", systemImage: "arrow.down.circle") { DownloadView().attestationActivityBanner() }
                     .badge(dvm.runningTaskCount)
-                Tab("Settings", systemImage: "gear") { SettingView() }
+                Tab("Settings", systemImage: "gear") { SettingView().attestationActivityBanner() }
             }
             .neverMinimizeTab()
             .activateSearchWhenSearchTabSelected()

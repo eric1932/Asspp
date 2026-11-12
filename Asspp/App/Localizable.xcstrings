@@ -4,6 +4,22 @@
     "" : {
       "shouldTranslate" : false
     },
+    "%@ downloaded" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ downloaded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已下载 %@"
+          }
+        }
+      }
+    },
     "@Lakr233" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1005,6 +1021,22 @@
         }
       }
     },
+    "Device Attestation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device Attestation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备认证"
+          }
+        }
+      }
+    },
     "Device GUID" : {
       "localizations" : {
         "en" : {
@@ -1186,6 +1218,22 @@
         }
       }
     },
+    "Downloading Apple components (first time only)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloading Apple components (first time only)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载 Apple 组件（仅首次）"
+          }
+        }
+      }
+    },
     "Downloads" : {
       "localizations" : {
         "en" : {
@@ -1358,6 +1406,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "生成设备 GUID"
+          }
+        }
+      }
+    },
+    "Generating the download key" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generating the download key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成下载密钥"
+          }
+        }
+      }
+    },
+    "Getting a machine identity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getting a machine identity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取机器标识"
           }
         }
       }
@@ -2181,6 +2261,22 @@
         }
       }
     },
+    "Registering this device with Apple" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registering this device with Apple"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在向 Apple 注册本设备"
+          }
+        }
+      }
+    },
     "Request Download" : {
       "localizations" : {
         "en" : {
@@ -2613,6 +2709,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录您的账户。"
+          }
+        }
+      }
+    },
+    "Signing the request" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signing the request"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在为请求签名"
           }
         }
       }

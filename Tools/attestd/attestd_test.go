@@ -177,7 +177,7 @@ func TestRequestsRequireToken(t *testing.T) {
 	}
 
 	recorder, body := call(t, srv, http.MethodGet, "/v1/health", nil, testToken)
-	if recorder.Code != http.StatusOK || body["ipatoolCommit"] == nil {
+	if recorder.Code != http.StatusOK || body["ipatoolCommit"] == nil || body["assetBytes"] == nil {
 		t.Fatalf("health: %d %v", recorder.Code, body)
 	}
 }

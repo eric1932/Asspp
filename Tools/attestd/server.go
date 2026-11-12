@@ -123,6 +123,7 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 		"ipatoolCommit": ipatoolCommit,
 		"assetsCached":  cacheHasEntries("ipatool", "sap"),
 		"unicornCached": cacheHasEntries("ipatool", "unicorn"),
+		"assetBytes":    assetBytesReceived.Load(),
 	})
 }
 

@@ -50,7 +50,15 @@ struct AttestationServiceProvider: DeviceAttestationProviding {
     }
 
     private func post<Response: Decodable>(_ method: String, _ body: some Encodable) async throws -> Response {
-        let (status, data) = try await transport.send(method, body: JSONEncoder().encode(body))
+        let payload = try JSONEncoder().encode(body)
+        let activity = await AttestationActivity.shared.begin(AttestationActivity.Step(method: method))
+        let monitor = Task { await reportComponentDownload(for: activity) }
+        defer {
+            monitor.cancel()
+            Task { @MainActor in AttestationActivity.shared.end(activity) }
+        }
+
+        let (status, data) = try await transport.send(method, body: payload)
 
         guard status == 200 else {
             let failure = try? JSONDecoder().decode(ErrorResponse.self, from: data)
@@ -69,6 +77,34 @@ struct AttestationServiceProvider: DeviceAttestationProviding {
             throw DeviceAttestationError.failed("unexpected response from \(method)")
         }
     }
+
+    /// While a call runs, shows how much of Apple's components the first download has got.
+    /// Does nothing once they are cached, or when the service does not report a byte count.
+    private func reportComponentDownload(for activity: AttestationActivity.Entry.ID) async {
+        guard let first = await health(), first.assetsCached == false, let baseline = first.assetBytes else { return }
+        await AttestationActivity.shared.update(activity, downloadedBytes: 0)
+
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, let status = await health() else { return }
+            if status.assetsCached == true {
+                await AttestationActivity.shared.update(activity, downloadedBytes: nil)
+                return
+            }
+            await AttestationActivity.shared.update(activity, downloadedBytes: max(0, (status.assetBytes ?? baseline) - baseline))
+        }
+    }
+
+    private func health() async -> HealthResponse? {
+        guard let response = try? await transport.send("health", body: Data()), response.status == 200 else { return nil }
+        return try? JSONDecoder().decode(HealthResponse.self, from: response.body)
+    }
+}
+
+private struct HealthResponse: Decodable {
+    let assetsCached: Bool?
+    /// Bytes read from Apple's update CDN since the service started. Older services leave it out.
+    let assetBytes: Int64?
 }
 
 private struct GUIDRequest: Encodable {
