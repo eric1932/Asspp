@@ -17,25 +17,11 @@ final nonisolated class LogManager: Sendable {
     // Confined to messageQueue, so a single formatter instance is safe to reuse.
     private nonisolated(unsafe) let timestampFormatter = ISO8601DateFormatter()
     private nonisolated(unsafe) var messages: [String] = []
-    // DEBUG BUILD: mirror every message to ~/Library/Logs/Asspp-debug.log. Confined to messageQueue.
-    private nonisolated(unsafe) let debugFile: FileHandle? = {
-        let directory = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Logs", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("Asspp-debug.log")
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-        }
-        let handle = try? FileHandle(forWritingTo: url)
-        _ = try? handle?.seekToEnd()
-        return handle
-    }()
 
     func write(_ content: String) {
         messageQueue.async {
             let timestamp = self.timestampFormatter.string(from: Date())
             let logMessage = "[\(timestamp)]\n\(content)"
-            try? self.debugFile?.write(contentsOf: Data("\(timestamp) \(content)\n".utf8))
             self.messages.append(logMessage)
             // Cap retained history so a long-running session cannot grow memory
             // without bound.

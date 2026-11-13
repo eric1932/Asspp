@@ -166,7 +166,7 @@ public actor Authenticator {
             let accumulator = ResponseAccumulator(request: request, maxBodySize: 2 * 1024 * 1024)
             let response = try await client.execute(request: request, delegate: accumulator).futureResult.get()
             let action = Self.machineAction(response)
-            // DEBUG BUILD: trace every authentication round trip without credentials or header values.
+            // One line per round trip, without credentials or header values, to tell Apple's stages apart.
             let machineLabel = machineHeaders.isEmpty ? "none" : String(machineHeaders.count) + " headers"
             let codeLabel = code.isEmpty ? "password" : "password+code"
             let backend = response.headers.contains(name: "x-apple-jingle-correlation-key")
